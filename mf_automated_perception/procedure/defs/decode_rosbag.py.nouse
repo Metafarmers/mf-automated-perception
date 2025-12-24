@@ -1,0 +1,91 @@
+from pydantic import BaseModel
+from typing import Dict, List
+from pathlib import Path
+
+from mflib.perception.automated_perception.grain.grain_base import GrainBase, GrainKey
+from mflib.perception.automated_perception.procedure.procedure_base import ProcedureBase
+from mflib.perception.automated_perception.grain.raw.rosbag.grain_def import RawRosbagGrain
+from mflib.perception.automated_perception.utils.gp_logger import get_logger
+
+from mflib.perception.automated_perception.utils.rosbag_parser import (
+  parse_rosbag_metadata,
+)
+
+class ProcedureDecodeRosbagConfig(BaseModel):
+  rosbag_path: str
+  # image_topics: list[str] # this is detected automatically
+  pointcloud2_topics: list[str]
+
+
+class ProcedureDecodeRosbag(ProcedureBase):
+  key: str = "decode_rosbag2"
+  version: str = "1.0.0"
+  input_grains: List[GrainKey] = []
+  output_grains: List[GrainKey] = [("raw", "rosbag")]
+  ParamModel = ProcedureDecodeRosbagConfig
+  description: str = "Decode a ROS2 rosbag into raw grains."
+
+  def _run(
+    self,
+    *,
+    input_grains: Dict[GrainKey, GrainBase],
+    output_grains: Dict[GrainKey, GrainBase],
+    config,
+    logger,
+  ) -> None:
+
+    rosbag_out_grain = output_grains[("raw", "rosbag")]
+
+    """
+    Import a ROS2 bag into this SQLite database.
+    One bag -> one DB.
+    """
+
+
+    # create dirs
+    # img_dir = rosbag_out_grain.grain_dir / "images"
+    # lidar_dir = rosbag_out_grain.grain_dir / "lidar"
+    # img_dir.mkdir(parents=True)
+    # lidar_dir.mkdir(parents=True)
+
+
+    # ---------- read metadata.yaml ----------
+    bag_path = Path(config.rosbag_path)
+    metadata_path = bag_path / "metadata.yaml"
+    if not metadata_path.exists():
+      raise FileNotFoundError(f"metadata.yaml not found in {bag_path}")
+
+    storage_identifier, topics = parse_rosbag_metadata(metadata_path)
+
+    # process image topics with intrinsics
+    intrinsics_map = find_image_topics_with_intrinsics(
+      bag_path=bag_path,
+      storage_identifier=storage_identifier,
+      topics=topics,
+    )
+    for im_topic, value in intrinsics_map.items():
+      logger.info(f"Found image topic with intrinsics: {im_topic}")
+
+    return
+
+
+def main():
+  procedure = ProcedureDecodeRosbag()
+  config = {
+    'rosbag_path': '/workspace/data/mantis-eye/dongtan_automated_perception/dongtan_mot_routine/rosbag2_2025_12_05-06_31_55',
+  }
+
+  output_grain = RawRosbagGrain()
+  output_grain.create()
+
+  logger = get_logger("ProcedureDecodeRosbag", '/workspace/data/mantis-eye/gp/log')
+  procedure.run(
+    input_grains={},
+    output_grains={("raw", "rosbag"): output_grain},
+    config=config,
+    logger=logger,
+  )
+  output_grain.close()
+
+if __name__ == '__main__':
+  main()

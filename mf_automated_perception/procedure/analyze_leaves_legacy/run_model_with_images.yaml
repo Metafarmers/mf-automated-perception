@@ -1,0 +1,11 @@
+image_dir: "/workspace/data/omnitor/images"
+depth_dir: "/workspace/data/omnitor/depth_images_da3"
+flower_model: "/opt/config/perception/ai_models/strawberry2024DB.pt"
+flower_labels: [5]
+branch_model: "/opt/config/perception/ai_models/strawberry2024DB.pt"
+branch_labels: [2]
+leaf_seg_model: "/opt/config/perception/ai_models/straw_all_seg.pt"
+leaf_seg_labels: [1]
+
+target_inference_size: [720, 904] # H, W
+result_dir: "/workspace/data/omnitor/res"

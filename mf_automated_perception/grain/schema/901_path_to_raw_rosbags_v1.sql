@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS path_to_raw (
+  bag_dir TEXT PRIMARY KEY NOT NULL,
+  storage_identifier TEXT NOT NULL,
+  detected_by TEXT NOT NULL,
+  scanned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

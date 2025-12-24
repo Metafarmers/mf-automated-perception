@@ -1,0 +1,63 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# =========================
+# Packaging / build
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# pytest / test artifacts
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# IDE / editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# =========================
+# Logs / runtime artifacts
+# =========================
+*.log
+logs/
+
+# =========================
+# Data / outputs (runtime)
+# =========================
+data/
+output/
+outputs/
+results/
+tmp/
+cache/
+
+# =========================
+# Rerun / visualization
+# =========================
+*.rrd
+rerun.log
+
+# =========================
+# OS / misc
+# =========================
+Thumbs.db
