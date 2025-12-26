@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from mflib.perception.automated_perception.grain.grain_base import GrainBase, GrainKey
+from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 
 
 class RawRosbagPath(GrainBase):
@@ -16,6 +16,6 @@ class RawRosbagPath(GrainBase):
   key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
 
   SCHEMA_FILES = [
-    "001_init.sql",
-    "901_path_to_raw_rosbags.sql",
+    "001_init_v1.sql",
+    "901_path_to_raw_rosbags_v1.sql",
   ]

@@ -1,12 +1,13 @@
-from pydantic import BaseModel
-from typing import Dict, List, ClassVar, Type
-from pathlib import Path
-import yaml
 import subprocess
+from pathlib import Path
+from typing import ClassVar, Dict, List, Optional, Tuple, Type
 
-from mflib.perception.automated_perception.grain.grain_base import GrainBase, GrainKey
-from mflib.perception.automated_perception.procedure.procedure_base import ProcedureBase
-from mflib.perception.automated_perception.grain.defs.raw_rosbag_path import RawRosbagPath
+import yaml
+from pydantic import BaseModel
+
+from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
+from mf_automated_perception.procedure.core.procedure_base import ProcedureBase
+
 
 def try_rosbag_reindex(bag_dir: Path, logger) -> bool:
   """
@@ -60,10 +61,10 @@ class LocateRosbagsConfig(BaseModel):
 
 class LocateRosbags(ProcedureBase):
   key: ClassVar[str] = "locate_rosbags"
-  version: str = "1.0.0"
-  ParamModel: ClassVar[Type] = LocateRosbagsConfig
+  version: ClassVar[str] = "1.0.0"
+  ParamModel: ClassVar[Optional[Type]] = LocateRosbagsConfig
   description: ClassVar[str] = "Locate ROS2 rosbags and store their paths as raw grains."
-  input_grain_keys: ClassVar[List[GrainKey]] = []
+  input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
 
   def write_results_to_db(

@@ -34,6 +34,10 @@ ignore = [
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]
 
+
+# ============================
+# pytest configuration
+# ============================
 [tool.pytest.ini_options]
 addopts = "-ra -q"
 testpaths = ["tests"]

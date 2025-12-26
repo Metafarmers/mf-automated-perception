@@ -1,0 +1,5 @@
+decode_images: True
+decode_pointclouds: True
+# decode_imu: True
+# decode_tf: True
+# tf_from_to_frames: ['farm', 'base_link']

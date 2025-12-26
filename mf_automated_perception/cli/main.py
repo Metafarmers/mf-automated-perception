@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Optional
 
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from mf_automated_perception.host_runtime.docker_runner import run_procedure
 
 
 class MfEyeCLI:
@@ -112,9 +115,28 @@ def create_app(cli: MfEyeCLI) -> typer.Typer:
     """
     Run a procedure.
     """
-    cli.console.print("[bold]run called[/bold]")
-    cli.console.print(f"procedure_key = {procedure_key}")
-    cli.console.print(f"params = {params}")
+    if params is None:
+      params_path = Path("params") / f"{procedure_key}.yaml"
+    else:
+      params_path = Path(params)
+
+    cli.console.print(f"[bold]Running procedure[/bold]: {procedure_key}")
+    cli.console.print(f"params = {params_path}")
+
+    try:
+      run_procedure(
+        procedure=procedure_key,
+        params_file=params_path,
+        creator="tw",
+      )
+    except Exception as e:
+      cli.console.print(f"[red]Failed:[/red] {e}")
+      raise typer.Exit(code=1)
+
+    cli.console.print(
+      f"[green]Procedure '{procedure_key}' finished[/green]"
+    )
+
 
   # -----------------------------------------------------------------
   # doctor

@@ -9,13 +9,18 @@ RUN apt-get update && apt-get install -y \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
+RUN apt update
+RUN apt install -y \
+  ros-humble-rosbag2-py \
+  ros-humble-rclpy \
+  ros-humble-sensor-msgs \
+  && rm -rf /var/lib/apt/lists/*
+
+
+
 RUN python3 -m pip install --upgrade pip
 
 WORKDIR /workspace
-
-COPY pyproject.toml ./
-
-RUN pip install -e .
 
 COPY . /workspace
 
@@ -25,4 +30,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=0
 ENV ROS_DISTRO=humble
 
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

@@ -11,6 +11,6 @@ class Dummy(GrainBase):
   key: ClassVar[GrainKey] = ("dummy",)
 
   SCHEMA_FILES = [
-    "001_init.sql",
-    "301_odometry.sql",
+    "001_init_v1.sql",
+    "301_odometry_v1.sql",
   ]

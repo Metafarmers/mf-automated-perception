@@ -1,10 +1,10 @@
 import importlib
 import pkgutil
-from typing import Dict, Tuple, Type
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Tuple, Type
 
-from mflib.perception.automated_perception.grain.grain_base import (
+from mf_automated_perception.grain.grain_base import (
   GrainBase,
   GrainKey,
 )
@@ -13,9 +13,14 @@ from mflib.perception.automated_perception.grain.grain_base import (
 class GrainFactory:
   """
   Global factory and registry for Grain classes.
+
+  Registry rule example:
+    - module name: raw_rosbag_path
+    - class name: RawRosbagPath
+    - class.key: ("raw", "rosbag", "path")
   """
 
-  _BASE_PKG = "mflib.perception.automated_perception.grain.defs"
+  _BASE_PKG = "mf_automated_perception.grain.defs"
 
   _REGISTRY: Dict[GrainKey, Type[GrainBase]] = {}
   _BUILT: bool = False
@@ -27,6 +32,9 @@ class GrainFactory:
   def build_registry(cls) -> None:
     if cls._BUILT:
       return
+
+    # build into a temporary dict to keep atomicity
+    registry: Dict[GrainKey, Type[GrainBase]] = {}
 
     try:
       pkg = importlib.import_module(cls._BASE_PKG)
@@ -44,29 +52,47 @@ class GrainFactory:
       if module_name.startswith("_"):
         continue
 
-      key: GrainKey = tuple(module_name.split("_"))
-      class_name = "".join(k.capitalize() for k in key)
       full_module = f"{cls._BASE_PKG}.{module_name}"
-
       module = importlib.import_module(full_module)
 
-      if not hasattr(module, class_name):
+      expected_key: GrainKey = tuple(module_name.split("_"))
+      expected_class_name = "".join(k.capitalize() for k in expected_key)
+
+      if not hasattr(module, expected_class_name):
         raise RuntimeError(
-          f"Expected grain class '{class_name}' not found in {full_module}"
+          f"Grain module '{full_module}' must define class "
+          f"'{expected_class_name}' "
+          f"(derived from module name '{module_name}')"
         )
 
-      grain_cls = getattr(module, class_name)
+      grain_cls = getattr(module, expected_class_name)
 
-      if not issubclass(grain_cls, GrainBase):
+      if not isinstance(grain_cls, type) or not issubclass(grain_cls, GrainBase):
         raise TypeError(
-          f"{class_name} is not a subclass of GrainBase"
+          f"{expected_class_name} in {full_module} "
+          f"is not a subclass of GrainBase"
         )
 
-      if key in cls._REGISTRY:
-        raise RuntimeError(f"Duplicate grain key detected: {key}")
+      class_key = getattr(grain_cls, "key", None)
+      if class_key is None:
+        raise RuntimeError(
+          f"{expected_class_name} must define class-level 'key'"
+        )
 
-      cls._REGISTRY[key] = grain_cls
+      if tuple(class_key) != expected_key:
+        raise RuntimeError(
+          f"Grain key mismatch in {expected_class_name}: "
+          f"expected {expected_key} from module name, "
+          f"but class defines {class_key}"
+        )
 
+      if expected_key in registry:
+        raise RuntimeError(f"Duplicate grain key detected: {expected_key}")
+
+      registry[expected_key] = grain_cls
+
+    # commit atomically
+    cls._REGISTRY = registry
     cls._BUILT = True
 
   # --------------------------------------------------
@@ -86,6 +112,31 @@ class GrainFactory:
     return tuple(cls._REGISTRY.keys())
 
   @classmethod
+  def _parse_timestamp_dirs(
+    cls,
+    base_dir: Path,
+  ) -> List[tuple[datetime, Path]]:
+    candidates: List[tuple[datetime, Path]] = []
+
+    for p in base_dir.iterdir():
+      if not p.is_dir():
+        continue
+
+      # split on first underscore after timestamp
+      name = p.name
+      ts_part = name[:19]  # "YYYY-MM-DD_HH-MM-SS"
+
+      try:
+        ts = datetime.strptime(ts_part, "%Y-%m-%d_%H-%M-%S")
+      except ValueError:
+        continue
+
+      candidates.append((ts, p))
+
+    return candidates
+
+
+  @classmethod
   def load_latest_grain(
     cls,
     *,
@@ -101,22 +152,16 @@ class GrainFactory:
       key_dir = key_dir / k
 
     if not key_dir.exists():
-      raise FileNotFoundError(f"No grain directory for key {key}: {key_dir}")
+      raise FileNotFoundError(
+        f"No grain directory for key {key}: {key_dir}"
+      )
 
-    candidates = []
-    for p in key_dir.iterdir():
-      if not p.is_dir():
-        continue
-
-      try:
-        ts = datetime.strptime(p.name, "%Y-%m-%d_%H-%M-%S")
-      except ValueError:
-        continue
-
-      candidates.append((ts, p))
+    candidates = cls._parse_timestamp_dirs(key_dir)
 
     if not candidates:
-      raise FileNotFoundError(f"No grain instances found for key {key}: {key_dir}")
+      raise FileNotFoundError(
+        f"No grain instances found for key {key}: {key_dir}"
+      )
 
     candidates.sort(key=lambda x: x[0], reverse=True)
     latest_dir = candidates[0][1]

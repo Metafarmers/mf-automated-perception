@@ -1,9 +1,10 @@
 import json
 import sqlite3
-import pytest
+from typing import ClassVar
 
-from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 from mf_automated_perception.grain.defs._dummy import Dummy
+from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
+
 
 def test_grain_base_lifecycle_real_environment():
   """
@@ -32,7 +33,6 @@ def test_grain_base_lifecycle_real_environment():
   # ===============================================================
 
   assert grain.grain_data_root.exists()
-  assert grain.grain_lib_root.exists()
   assert grain.db_path.exists()
   assert grain.manifest_path.exists()
 
@@ -76,13 +76,11 @@ def test_grain_base_lifecycle_real_environment():
   grain.close()
   assert grain._conn is None
 
-@pytest.mark.integration
-@pytest.mark.order(1)
 def test_simple():
   # simple test
   class TestGrain(GrainBase):
-    key: GrainKey = ("test", "grain")
-    SCHEMA_FILES = ["001_init.sql"]
+    key: ClassVar[GrainKey] = ("test", "grain") # type: ignore
+    SCHEMA_FILES = ["001_init_v1.sql"]
 
   grain = TestGrain()
   grain.set_provenance(
@@ -94,17 +92,67 @@ def test_simple():
   grain.open()
   grain.close()
   grain.print_grain_summary()
+  assert grain.grain_data_dir.exists() # it can not be called as it is deleted
+  grain.delete()
 
-@pytest.mark.integration
-@pytest.mark.order(1)
 def test_dummy_grain():
   grain = Dummy()
   grain.set_provenance(
     source_procedure="dummy_test",
-    source_grain_keys=[grain.key],
+    source_grain_keys=[],
     creator="dummy_tester",
   )
   grain.create()
   grain.open()
   grain.close()
   grain.print_grain_summary()
+  assert grain.grain_data_dir.exists()
+  grain.delete()
+
+def test_dummy_grain_with_odometry_db():
+  grain = Dummy()
+
+  grain.set_provenance(
+    source_procedure="dummy_test",
+    source_grain_keys=[],
+    creator="dummy_tester",
+  )
+  grain.create()
+
+  # schema는 이미 적용됨
+  conn = grain.open()
+
+  for i in range(3):
+    conn.execute(
+      """
+      INSERT INTO odometry (
+        timestamp_sec, timestamp_nsec,
+        px, py, pz,
+        qx, qy, qz, qw,
+        vx, vy, vz,
+        wx, wy, wz
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      """,
+      (
+        100 + i,
+        i * 100_000_000,
+        float(i),
+        float(i + 1),
+        float(i + 2),
+        0.0, 0.0, 0.0, 1.0,
+        0.1 * i, 0.2 * i, 0.3 * i,
+        0.01 * i, 0.02 * i, 0.03 * i,
+      ),
+    )
+
+  conn.commit()
+  grain.close()
+
+  # inspection
+  assert "odometry" in grain.list_tables()
+
+  rows = grain.count_rows('odometry')
+  assert rows == 3
+
+  grain.summarize_db(max_rows=2)

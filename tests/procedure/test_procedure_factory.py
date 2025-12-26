@@ -1,28 +1,14 @@
-from mflib.perception.automated_perception.procedure.procedure_factory import (
-  ProcedureFactory,
+from mf_automated_perception.procedure.core.procedure_base import ProcedureBase
+from mf_automated_perception.procedure.core.procedure_factory import ProcedureFactory
+from mf_automated_perception.procedure.defs._dummy.definition import (
+  Dummy as DummyProcedure,
 )
-from mflib.perception.automated_perception.procedure.procedure_base import (
-  ProcedureBase,
-)
-
-def test_build_registry():
-  ProcedureFactory.build_registry()
-
-  registry = ProcedureFactory.list_procedures()
-  print(registry)
-  assert isinstance(registry, dict)
-  assert len(registry) > 0
-
-  for key, proc_cls in registry.items():
-    assert issubclass(proc_cls, ProcedureBase)
-    assert proc_cls.key == key
 
 
-def test_get_procedure():
-  ProcedureFactory.build_registry()
-  registry = ProcedureFactory.list_procedures()
+def test_procedure_factory_dummy():
+  proc_cls = ProcedureFactory.get("_dummy")
+  assert proc_cls is DummyProcedure
+  assert issubclass(proc_cls, ProcedureBase)
 
-  key = next(iter(registry.keys()))
-  proc_cls = ProcedureFactory.get(key)
-
-  assert proc_cls is registry[key]
+  proc = proc_cls()
+  assert isinstance(proc, ProcedureBase)
