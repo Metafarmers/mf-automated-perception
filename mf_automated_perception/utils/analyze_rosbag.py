@@ -7,18 +7,20 @@ from typing import Dict
 import yaml
 
 
-def parse_rosbag_metadata(metadata_path: Path):
+def parse_rosbag_metadata(bag_dir):
   """
   Returns:
     storage_identifier: str
     topics: dict[name -> type]
   """
+  metadata_path = Path(bag_dir) / "metadata.yaml"
   with open(metadata_path, "r") as f:
     meta = yaml.safe_load(f)
 
   info = meta["rosbag2_bagfile_information"]
 
   storage_identifier = info["storage_identifier"]
+  msg_count = info["message_count"]
 
   topics = {}
   for t in info["topics_with_message_count"]:
@@ -26,10 +28,10 @@ def parse_rosbag_metadata(metadata_path: Path):
     typ = t["topic_metadata"]["type"]
     topics[name] = typ
 
-  return storage_identifier, topics
+  return storage_identifier, msg_count, topics
 
 
-def map_topics_and_intrinsics(
+def map_image_topics_and_intrinsics(
   *,
   bag_dir: str,
   logger
@@ -48,16 +50,11 @@ def map_topics_and_intrinsics(
   from rclpy.serialization import deserialize_message
   from sensor_msgs.msg import CameraInfo
 
-  bag_dir = Path(bag_dir)
 
   # -------------------------------------------------
   # 1. parse metadata.yaml
   # -------------------------------------------------
-  metadata_path = bag_dir / "metadata.yaml"
-  if not metadata_path.exists():
-    raise FileNotFoundError(f"metadata.yaml not found: {metadata_path}")
-
-  storage_identifier, topics = parse_rosbag_metadata(metadata_path)
+  storage_identifier, _, topics = parse_rosbag_metadata(bag_dir)
 
   # -------------------------------------------------
   # 2. collect image & camera_info topics

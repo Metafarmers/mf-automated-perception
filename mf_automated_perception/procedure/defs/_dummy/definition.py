@@ -8,7 +8,6 @@ from mf_automated_perception.procedure.core.procedure_base import (
   ProcedureBase,
 )
 
-
 class DummyConfig(BaseModel):
   dummy_param: str = "default_value"
 

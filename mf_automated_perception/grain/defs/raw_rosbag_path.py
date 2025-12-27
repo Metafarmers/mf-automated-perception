@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import ClassVar, Tuple
 
 from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 
@@ -15,7 +15,7 @@ class RawRosbagPath(GrainBase):
 
   key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
 
-  SCHEMA_FILES = [
+  SCHEMA_FILES: Tuple[str, ...] = (
     "001_init_v1.sql",
     "901_path_to_raw_rosbags_v1.sql",
-  ]
+  )

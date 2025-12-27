@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS images (
   timestamp_nsec INTEGER NOT NULL,
 
   -- image metadata
-  filename TEXT,
+  path_to_raw TEXT NOT NULL,
   width INTEGER NOT NULL,
   height INTEGER NOT NULL,
   encoding TEXT NOT NULL,
@@ -17,10 +17,7 @@ CREATE TABLE IF NOT EXISTS images (
   K TEXT,
 
   -- camera distortion coefficients (variable length, JSON array)
-  D TEXT,
-
-  -- path to raw image file
-  path_to_raw TEXT NOT NULL
+  D TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_images_timestamp

@@ -54,8 +54,8 @@ GRAIN_DATA_ROOT = _get_path_from_env(
   "/workspace/data",
 )
 
-SCHEMA_ROOT = _get_path_from_env(
-  "SCHEMA_ROOT",
+BASE_SCHEMA_ROOT = _get_path_from_env(
+  "BASE_SCHEMA_ROOT",
   "/workspace/mf_automated_perception/grain/schema",
 )
 

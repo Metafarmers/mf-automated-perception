@@ -7,7 +7,11 @@ from typing import Any, ClassVar, Iterable, List, Optional, Tuple
 
 from pydantic import BaseModel, PrivateAttr
 
-from mf_automated_perception.env import GIT_COMMIT_HASH, GRAIN_DATA_ROOT, SCHEMA_ROOT
+from mf_automated_perception.env import (
+  GIT_COMMIT_HASH, 
+  GRAIN_DATA_ROOT, 
+  BASE_SCHEMA_ROOT
+)
 from mf_automated_perception.grain.grain_manifest import GrainManifest
 
 GrainKey = Tuple[str, ...]
@@ -24,7 +28,7 @@ class GrainBase(ABC, BaseModel):
   # Actual type is GrainKey and validated in model_post_init.
   key: ClassVar[Any]
 
-  SCHEMA_FILES: ClassVar[List[str]] = []
+  SCHEMA_FILES: Tuple[str, ...]
 
   # ===============================================================
   # private state
@@ -93,6 +97,11 @@ class GrainBase(ABC, BaseModel):
   @property
   def is_created(self) -> bool:
     return self._is_created
+  
+  @property
+  def schema_dir(self) -> Path:
+    return self.grain_data_dir / "schema"
+
 
   # ===============================================================
   # manifest access (read-only)
@@ -166,14 +175,29 @@ class GrainBase(ABC, BaseModel):
     if not self.SCHEMA_FILES:
       return
 
+    schema_dir = self.schema_dir
+    schema_dir.mkdir(parents=True, exist_ok=True)
+
     conn = self.open()
     try:
       for name in self.SCHEMA_FILES:
-        sql = (SCHEMA_ROOT / name).read_text()
+        src = BASE_SCHEMA_ROOT / name
+        if not src.exists():
+          raise FileNotFoundError(f"Schema file not found: {src}")
+
+        sql = src.read_text()
+
+        # 1. DB에 적용
         conn.executescript(sql)
+
+        # 2. grain 내부에 schema 원본 저장
+        dst = schema_dir / name
+        dst.write_text(sql)
+
       conn.commit()
     finally:
       self.close()
+
 
   # ===============================================================
   # database access
@@ -266,6 +290,7 @@ class GrainBase(ABC, BaseModel):
     *,
     grain_data_dir: Path,
   ) -> "GrainBase":
+    # must be called on subclass
     if cls is GrainBase:
       raise RuntimeError(
         "GrainBase.load_from_dir() must be called on a concrete subclass"
@@ -274,7 +299,9 @@ class GrainBase(ABC, BaseModel):
     grain_data_dir = Path(grain_data_dir)
     manifest_path = grain_data_dir / "manifest.json"
     db_path = grain_data_dir / "data.db3"
+    schema_dir = grain_data_dir / "schema"
 
+    # basic file checks
     if not manifest_path.exists():
       raise FileNotFoundError(f"manifest.json not found: {manifest_path}")
     if not db_path.exists():
@@ -284,17 +311,37 @@ class GrainBase(ABC, BaseModel):
       manifest_path.read_text()
     )
 
+    # key must match class
     if tuple(manifest.key) != cls.key:
       raise ValueError(
         f"Grain key mismatch: "
         f"class key={cls.key}, manifest key={tuple(manifest.key)}"
       )
 
+    # validate sealed schema
+    if manifest.schema_files:
+      if not schema_dir.exists():
+        raise RuntimeError(f"Schema directory missing: {schema_dir}")
+
+      missing = [
+        name for name in manifest.schema_files
+        if not (schema_dir / name).exists()
+      ]
+      if missing:
+        raise RuntimeError(f"Schema files missing: {missing}")
+
+    # restore grain state
     grain = cls()
     grain._manifest = manifest
     grain._is_created = True
     grain._grain_id = grain_data_dir.name
+
+    # prevent schema re-application
+    grain.SCHEMA_FILES = []
+
     return grain
+
+
 
   def list_tables(self) -> List[str]:
     if not self._is_created:
@@ -309,6 +356,39 @@ class GrainBase(ABC, BaseModel):
     finally:
       conn.close()
 
+  def get_schema_sql(self) -> str:
+    """
+    Return concatenated SQL schema used to create this grain.
+    """
+    if not self._is_created:
+      raise RuntimeError("get_schema_sql() requires created grain")
+
+    schema_dir = self.schema_dir
+    print('schema_dir: ', schema_dir)
+    if not schema_dir.exists():
+      return ""
+
+    parts: List[str] = []
+
+    for path in sorted(schema_dir.glob("*.sql")):
+      parts.append(
+        f"-- schema file: {path.name}\n{path.read_text()}"
+      )
+
+    return "\n\n".join(parts)
+
+  def get_schema_files(self) -> List[str]:
+    if not self._is_created:
+      raise RuntimeError("get_schema_files() requires created grain")
+
+    schema_dir = self.schema_dir
+    if not schema_dir.exists():
+      return []
+
+    return sorted(p.name for p in schema_dir.glob("*.sql"))
+
+
+
   def table_view(
     self,
     *,
@@ -318,7 +398,6 @@ class GrainBase(ABC, BaseModel):
     if not self._is_created:
       raise RuntimeError("table_view() requires created grain")
 
-    print('db path: ', self.db_path)
     conn = sqlite3.connect(self.db_path)
     conn.row_factory = sqlite3.Row
     try:

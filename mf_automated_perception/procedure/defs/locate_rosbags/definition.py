@@ -57,7 +57,7 @@ def find_leaf_directories(root: Path) -> List[Path]:
   return leaf_dirs
 
 class LocateRosbagsConfig(BaseModel):
-  search_root: str
+  search_root: str = '/external_data'
 
 class LocateRosbags(ProcedureBase):
   key: ClassVar[str] = "locate_rosbags"

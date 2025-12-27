@@ -1,4 +1,4 @@
-from typing import ClassVar
+from typing import ClassVar, Tuple
 
 from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 
@@ -10,8 +10,8 @@ class RawRosbagDecoded(GrainBase):
 
   key: ClassVar[GrainKey] = ("raw", "rosbag", 'decoded')
 
-  SCHEMA_FILES = [
+  SCHEMA_FILES: Tuple[str, ...] = (
     "001_init_v1.sql",
     "101_images_v1.sql",
     "102_pointclouds_v1.sql",
-  ]
+  )
