@@ -20,6 +20,7 @@ def save_image_msg(
   image_topics_with_intrinsics: dict,
   image_data_root,
   bridge,
+  sensor_name: str,
   logger,
 ):
   from rclpy.serialization import deserialize_message
@@ -31,13 +32,19 @@ def save_image_msg(
   topic_l = topic.lower()
 
   if ("rgb" in topic_l) or ("color" in topic_l):
-    subdir = "rgb"
+    if sensor_name != '':
+      subdir = sensor_name
+    else:
+      subdir = "rgb"
     ext = "jpg"
     encoding = "bgr8"
   elif "depth" in topic_l:
-    subdir = "depth"
+    if sensor_name != '':
+      subdir = sensor_name
+    else:
+      subdir = "depth"
     ext = "png"
-    encoding = "depth"
+    encoding = "16uc1"
   else:
     return
 
@@ -63,7 +70,8 @@ def save_image_msg(
     return
 
   ts = f"{msg.header.stamp.sec}_{msg.header.stamp.nanosec}"
-  out_path = out_dir / f"{topic.replace('/', '_')}_{ts}.{ext}"
+  # out_path = out_dir / f"{topic.replace('/', '_')}_{ts}.{ext}"
+  out_path = out_dir / f"{ts}.{ext}"
 
   if not cv2.imwrite(
     str(out_path),
@@ -89,6 +97,7 @@ def save_image_msg(
     INSERT INTO images (
       timestamp_sec,
       timestamp_nsec,
+      sensor_name,
       path_to_raw,
       width,
       height,
@@ -96,11 +105,12 @@ def save_image_msg(
       K,
       D
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
     (
       msg.header.stamp.sec,
       msg.header.stamp.nanosec,
+      sensor_name,
       str(out_path),
       img.shape[1],
       img.shape[0],
@@ -117,6 +127,7 @@ def save_pointcloud_msg(
   data: bytes,
   topic: str,
   pointcloud_data_root,
+  sensor_name: str,
   logger,
 ):
   import numpy as np
@@ -163,39 +174,38 @@ def save_pointcloud_msg(
     INSERT INTO pointclouds (
       timestamp_sec,
       timestamp_nsec,
+      sensor_name,
       num_points,
       fields,
       path_to_raw
     )
-    VALUES (?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?)
     """,
     (
       msg.header.stamp.sec,
       msg.header.stamp.nanosec,
+      sensor_name,
       int(xyz.shape[0]),
       json.dumps(["x", "y", "z"]),
       str(out_path),
     ),
   )
 
-
-
-
-
-
-
 class DecodeRosbagsConfig(BaseModel):
   decode_images: bool = True
   decode_pointclouds: bool = True
+  topic_to_sensor_name_map: Optional[Dict[str, str]] = None
   # decode_imu: bool = True
   # decode_tf: bool = True
   # tf_from_to_frames: Optional[List[Tuple[str, str]]] = None
 
 class DecodeRosbags(ProcedureBase):
   key: ClassVar[str] = "decode_rosbags"
-  version: ClassVar[str] = "1.0.0"
+  version: ClassVar[str] = "0.0.1"
+  docker_image: ClassVar[str] = 'mf-mantis-eye'
+  docker_image_tag: ClassVar[str] = 'latest'
   ParamModel: ClassVar[Optional[Type]] = DecodeRosbagsConfig
-  description: ClassVar[str] = "Locate ROS2 rosbags and store their paths as raw grains."
+  description: ClassVar[str] = "Decompose rosbag into smaller grains."
   input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = (("raw", "rosbag", "path"),)
   output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "decoded")
 
@@ -267,6 +277,12 @@ class DecodeRosbags(ProcedureBase):
 
         topic, data, t = reader.read_next()
 
+        sensor_name = None
+        if topic in config.topic_to_sensor_name_map:
+          sensor_name = config.topic_to_sensor_name_map[topic]
+        else:
+          sensor_name = topic.replace('/', '_').strip('_')
+
         # IMAGE
         if config.decode_images and topic in image_topics:
           save_image_msg(
@@ -277,6 +293,7 @@ class DecodeRosbags(ProcedureBase):
             image_topics_with_intrinsics=image_topics_with_intrinsics,
             image_data_root=image_data_root,
             bridge=bridge,
+            sensor_name=sensor_name,
             logger=logger,
           )
 
@@ -287,6 +304,7 @@ class DecodeRosbags(ProcedureBase):
             data=data,
             topic=topic,
             pointcloud_data_root=pointcloud_data_root,
+            sensor_name=sensor_name,
             logger=logger,
           )
 

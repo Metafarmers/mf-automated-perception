@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS images (
   -- epoch timestamp
   timestamp_sec INTEGER NOT NULL,
   timestamp_nsec INTEGER NOT NULL,
+  sensor_name TEXT NOT NULL,
 
   -- image metadata
   path_to_raw TEXT NOT NULL,

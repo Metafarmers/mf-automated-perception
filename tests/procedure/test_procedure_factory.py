@@ -6,7 +6,8 @@ from mf_automated_perception.procedure.defs._dummy.definition import (
 
 
 def test_procedure_factory_dummy():
-  proc_cls = ProcedureFactory.get("_dummy")
+  ProcedureFactory.build_registry()
+  proc_cls = ProcedureFactory.resolve_class("_dummy")
   assert proc_cls is DummyProcedure
   assert issubclass(proc_cls, ProcedureBase)
 

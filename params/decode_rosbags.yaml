@@ -1,5 +1,9 @@
-decode_images: True
-decode_pointclouds: True
 # decode_imu: True
 # decode_tf: True
 # tf_from_to_frames: ['farm', 'base_link']
+decode_images: true
+decode_pointclouds: false
+
+topic_to_sensor_name_map:
+  /cam2/color/image_rect_raw/compressed: d405_rgb_lying_down
+  /cam2/depth/image_rect_raw/compressedDepth: d405_depth_lying_down

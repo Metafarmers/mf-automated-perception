@@ -1,1 +1,2 @@
-export MF_GP_CONFIG_PATH=/home/tw/mf/mf-automated-perception/global_config.yaml
+export MF_DATA_ROOT=/home/tw/mf/data/mantis-eye/gp
+export MF_EXTERNAL_DATA_ROOT=/home/tw/mf/data/mantis-eye/dongtan_automated_perception/dongtan_mot_routine

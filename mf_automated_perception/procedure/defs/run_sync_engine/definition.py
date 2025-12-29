@@ -1,4 +1,3 @@
-import subprocess
 from pathlib import Path
 from typing import ClassVar, Dict, List, Optional, Tuple, Type
 
@@ -9,63 +8,20 @@ from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 from mf_automated_perception.procedure.core.procedure_base import ProcedureBase
 
 
-def try_rosbag_reindex(bag_dir: Path, logger) -> bool:
-  """
-  Try to reindex a rosbag directory.
-  Return True if reindex succeeded, False otherwise.
-  """
-  cmd = ["ros2", "bag", "reindex", str(bag_dir)]
-
-  logger.debug(f"Running reindex: {' '.join(cmd)}")
-
-  try:
-    proc = subprocess.run(
-      cmd,
-      stdout=subprocess.PIPE,
-      stderr=subprocess.PIPE,
-      text=True,
-      check=False,
-    )
-  except FileNotFoundError:
-    logger.error("ros2 CLI not found in PATH")
-    return False
-
-  if proc.returncode != 0:
-    logger.debug(f"reindex failed for {bag_dir}")
-    logger.debug(proc.stderr.strip())
-    return False
-
-  logger.info(f"reindex succeeded for {bag_dir}")
-  return True
+class RunSyncEngineConfig(BaseModel):
+  target_sensor_names: List[str]
+  pivot_sensor_name: str
+  max_time_diff_sec_dict: Dict[str, float]
 
 
-def find_leaf_directories(root: Path) -> List[Path]:
-  """
-  Find leaf directories under root.
-  Leaf directory = directory with no subdirectories.
-  """
-  leaf_dirs: List[Path] = []
 
-  for p in root.rglob("*"):
-    if not p.is_dir():
-      continue
-
-    has_subdir = any(child.is_dir() for child in p.iterdir())
-    if not has_subdir:
-      leaf_dirs.append(p)
-
-  return leaf_dirs
-
-class LocateRosbagsConfig(BaseModel):
-  search_root: str = '/external_data'
-
-class LocateRosbags(ProcedureBase):
-  key: ClassVar[str] = "locate_rosbags"
+class RunSyncEngine(ProcedureBase):
+  key: ClassVar[str] = "run_sync_engine"
   version: ClassVar[str] = "0.0.1"
   docker_image: ClassVar[str] = 'mf-mantis-eye'
   docker_image_tag: ClassVar[str] = 'latest'
-  ParamModel: ClassVar[Optional[Type]] = LocateRosbagsConfig
-  description: ClassVar[str] = "Locate ROS2 rosbags and store their paths as raw grains."
+  ParamModel: ClassVar[Optional[Type]] = RunSyncEngineConfig
+  description: ClassVar[str] = "Time-sync grains from multiple (not limited to) sensory data  "
   input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
 

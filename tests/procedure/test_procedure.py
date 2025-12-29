@@ -15,6 +15,12 @@ def test_dummy_procedure_end_to_end(tmp_path):
   # prepare output grain
   # --------------------------------------------------
   output_grain = DummyGrain()
+  output_grain.set_provenance(
+    source_procedure="_dummy:1.0.0",
+    source_grain_keys=[],
+    creator="test_suite",
+  )
+  output_grain.create()
   # print('# of rows in DummyGrain():', output_grain.count_rows('odometry'))
 
   # --------------------------------------------------
@@ -25,16 +31,13 @@ def test_dummy_procedure_end_to_end(tmp_path):
     name="ProcedureDummyTest",
     file_dir=LOG_DIR_ROOT,
   )
-  proc.run(
+  proc._run(
     input_grains=None,
     output_grain=output_grain,
     config={},  # DummyConfig empty or default
-    context={
-      "creator": "procedure_test",
-      "test_name": "test_dummy_procedure_end_to_end",
-    },
     logger=logger,
   )
+  output_grain.close()
 
   # --------------------------------------------------
   # inspect output grain

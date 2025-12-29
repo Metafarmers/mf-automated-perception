@@ -30,6 +30,8 @@ class ProcedureBase(BaseModel, ABC):
   # ===============================================================
   key: ClassVar[str]
   version: ClassVar[str]
+  docker_image: ClassVar[str]
+  docker_image_tag: ClassVar[str]
   description: ClassVar[str] = ""
 
   ParamModel: ClassVar[Optional[Type]] = None
@@ -90,7 +92,6 @@ class ProcedureBase(BaseModel, ABC):
     # explicit input mode
     # ------------------------------------------
     if requires_inputs:
-      print('hi!')
       if input_grains is None:
         raise RuntimeError(
           f"{cls.key}: input_grains must be provided explicitly "
@@ -109,7 +110,7 @@ class ProcedureBase(BaseModel, ABC):
     self,
     *,
     input_grains: Optional[Dict[GrainKey, GrainBase]] = None,
-    output_grain: GrainBase,
+    output_grain: GrainBase | None,
     config_file: Path,
     context: Dict[str, Any],
     logger,
@@ -159,23 +160,24 @@ class ProcedureBase(BaseModel, ABC):
     # --------------------------------------------------
     # output grain validation
     # --------------------------------------------------
-    if output_grain.key != cls.output_grain_key:
-      raise ValueError(
-        f"{cls.key}: output grain key mismatch "
-        f"(expected={cls.output_grain_key}, received={output_grain.key})"
-      )
+    if output_grain is not None:
+      if output_grain.key != cls.output_grain_key:
+        raise ValueError(
+          f"{cls.key}: output grain key mismatch "
+          f"(expected={cls.output_grain_key}, received={output_grain.key})"
+        )
 
-    # --------------------------------------------------
-    # output grain provenance
-    # --------------------------------------------------
-    if context.get('creator') is None:
-      raise ValueError(f"{cls.key}: context['creator'] is required")
-    output_grain.set_provenance(
-      source_procedure=self.procedure_id,
-      source_grain_keys=list(resolved_inputs.keys()),
-      creator=context['creator'],
-    )
-    output_grain.create()
+      # --------------------------------------------------
+      # output grain provenance
+      # --------------------------------------------------
+      if context.get('creator') is None:
+        raise ValueError(f"{cls.key}: context['creator'] is required")
+      output_grain.set_provenance(
+        source_procedure=self.procedure_id,
+        source_grain_keys=list(resolved_inputs.keys()),
+        creator=context['creator'],
+      )
+      output_grain.create()
 
     # --------------------------------------------------
     # execute procedure logic

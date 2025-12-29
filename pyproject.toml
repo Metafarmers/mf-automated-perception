@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mf-eye = "mf_automated_perception.cli.main:app"
+mf-eye = "mf_automated_perception.host.cli.main:app"
 
 
 [tool.ruff]

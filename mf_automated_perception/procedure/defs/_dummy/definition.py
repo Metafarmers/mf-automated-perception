@@ -14,6 +14,8 @@ class DummyConfig(BaseModel):
 class Dummy(ProcedureBase):
   key: ClassVar[str] = "_dummy"
   version: ClassVar[str] = "1.0.0"
+  docker_image: ClassVar[str] = 'mf-mantis-eye'
+  docker_image_tag: ClassVar[str] = 'latest'
   ParamModel: ClassVar[Optional[Type]] = DummyConfig
   description: ClassVar[str] = "Dummy procedure for testing purposes."
   input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()

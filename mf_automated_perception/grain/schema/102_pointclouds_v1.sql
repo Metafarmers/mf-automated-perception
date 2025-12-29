@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS pointclouds (
   -- epoch timestamp
   timestamp_sec INTEGER NOT NULL,
   timestamp_nsec INTEGER NOT NULL,
+  sensor_name TEXT NOT NULL,
 
   num_points INTEGER NOT NULL,
   fields TEXT NOT NULL,

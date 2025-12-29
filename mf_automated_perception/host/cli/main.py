@@ -8,8 +8,11 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from mf_automated_perception.host_runtime.docker_runner import run_procedure
-
+from mf_automated_perception.host.runtime.docker_runner import run_procedure
+from mf_automated_perception.procedure.core.procedure_factory import (
+  ProcedureFactory,
+  ProcedureBase,
+)
 
 class MfEyeCLI:
   """
@@ -51,12 +54,22 @@ def create_app(cli: MfEyeCLI) -> typer.Typer:
     """
     cli.console.print("[bold]list-procedures called[/bold]")
 
+    ProcedureFactory.build_registry()
+    detail = ProcedureFactory.list_procedures()
+
     table = Table(title="Procedures")
     table.add_column("KEY")
-    table.add_column("VERSION")
-    table.add_column("EXECUTOR")
+    table.add_column("docker_image")
+    table.add_column("version")
+    table.add_column('description')
 
-    table.add_row("locate_rosbags", "1.0.0", "docker")
+    for _, classtype in detail.items():
+      table.add_row(
+        classtype.key,
+        f'{classtype.docker_image}:{classtype.docker_image_tag}',
+        classtype.version,
+        classtype.description
+      )
     cli.console.print(table)
 
   # -----------------------------------------------------------------
@@ -111,31 +124,46 @@ def create_app(cli: MfEyeCLI) -> typer.Typer:
     params: Optional[str] = typer.Option(
       None, "--params", help="Path to params file (yaml/json)"
     ),
+    bash: bool = typer.Option(
+      False, "--bash", help="Run docker container with bash instead of procedure"
+    ),
   ) -> None:
     """
     Run a procedure.
     """
+    # query image info from ProcedureFactory
+    ProcedureFactory.build_registry()
+    procedure = ProcedureFactory.resolve_class(procedure_key)
+    docker_image = f"{procedure.docker_image}:{procedure.docker_image_tag}"
+
     if params is None:
-      params_path = Path("params") / f"{procedure_key}.yaml"
+      if procedure.ParamModel is not None:
+        params_path = Path("params") / f"{procedure_key}.yaml"
+      else:
+        params_path = None
     else:
       params_path = Path(params)
 
-    cli.console.print(f"[bold]Running procedure[/bold]: {procedure_key}")
+    cli.console.print(f"Running procedure: {procedure_key}")
     cli.console.print(f"params = {params_path}")
+
 
     try:
       run_procedure(
         procedure=procedure_key,
         params_file=params_path,
         creator="tw",
+        docker_image=docker_image,
+        bash=bash,   # ← 여기만 추가
       )
     except Exception as e:
-      cli.console.print(f"[red]Failed:[/red] {e}")
+      cli.console.print(f"Failed: {e}")
       raise typer.Exit(code=1)
 
     cli.console.print(
-      f"[green]Procedure '{procedure_key}' finished[/green]"
+      f"Procedure '{procedure_key}' finished"
     )
+
 
 
   # -----------------------------------------------------------------

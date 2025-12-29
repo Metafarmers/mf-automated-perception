@@ -1,3 +1,28 @@
+## How to install
+```
+apt install python3-venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e . 
+```
+
+## build images
+``` 
+# currently supported image: [mf-mantis-eye]
+python3 build_docker.py --image_name mf-mantis-eye
+```
+
+## How to run
+```
+# first of all, you need to modify setup.bash
+# MF_DATA_ROOT: root of grain data
+# MF_EXTERNAL_DATA_ROOT: root of external data (e.g. rosbag2)
+
+# list all available procedures
+mf-eye list-procedures
+mf-eye run locate_rosbags
+```
+
 # Data Architecture Overview
 
 This project adopts a clear separation between **persistent storage** and **in-memory processing** to ensure scalability, performance, and long-term maintainability when handling large-scale sensor data.

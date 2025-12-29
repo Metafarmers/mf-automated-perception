@@ -61,7 +61,10 @@ def main() -> None:
 
   GrainFactory.build_registry()
   # output grain
-  output_grain = GrainFactory.resolve_class(procedure.output_grain_key)()
+  if len(procedure.output_grain_key) > 0:
+    output_grain = GrainFactory.resolve_class(procedure.output_grain_key)()
+  else:
+    output_grain = None
   try:
     procedure.run(
       input_grains=None,
@@ -80,7 +83,7 @@ def main() -> None:
 
   finally:
     try:
-      if "output_grain" in locals():
+      if output_grain is not None and "output_grain" in locals():
         output_grain.close()
     except Exception:
       logger.exception("Failed to close output grain")

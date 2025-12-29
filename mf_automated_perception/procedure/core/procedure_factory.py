@@ -112,7 +112,6 @@ class ProcedureFactory:
     cls._BUILT = True
 
 
-
   @classmethod
   def resolve_class(cls, key: str) -> Type[ProcedureBase]:
     cls.build_registry()
