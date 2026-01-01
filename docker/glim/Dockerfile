@@ -61,13 +61,17 @@ RUN apt-get update && apt-get install -y \
   git \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-  
-RUN python3 -m pip install --upgrade pip
-RUN pip install -e .
 
 COPY docker/glim/build_glim_in_docker.sh /root/build_glim_in_docker.sh
 WORKDIR /root
 RUN /bin/bash -c "/root/build_glim_in_docker.sh"
+
+WORKDIR /workspace
+RUN python3 -m pip install --upgrade pip
+RUN pip install -e .
+
+COPY docker/glim/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # --------------------------------------------------
 # Workspace

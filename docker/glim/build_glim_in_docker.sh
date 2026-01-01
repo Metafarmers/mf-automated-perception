@@ -155,8 +155,14 @@ colcon build \
   --cmake-args \
     -DCMAKE_BUILD_TYPE=Release
 
-echo ""
-echo "======================================"
-echo " GLIM build completed (viewer enabled)"
-echo " Clean: ./glim_build_all.sh clean"
-echo "======================================"
+# =====================================
+# Cleanup source directories after build
+# =====================================
+echo "[cleanup] removing build source directories to reduce image size"
+
+rm -rf \
+  gtsam \
+  iridescence \
+  gtsam_points
+
+echo "[cleanup] source directories removed"

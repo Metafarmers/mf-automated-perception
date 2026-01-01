@@ -6,5 +6,5 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 . /opt/ros/humble/setup.bash
-
+. /root/ros2_ws/install/setup.bash
 exec "$@"
