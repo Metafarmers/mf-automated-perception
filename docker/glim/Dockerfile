@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY docker/glim/build_glim_in_docker.sh /root/build_glim_in_docker.sh
+COPY docker/glim/glim_ros2 /root/tmp/glim_ros2
 WORKDIR /root
 RUN /bin/bash -c "/root/build_glim_in_docker.sh"
 

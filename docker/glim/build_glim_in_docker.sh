@@ -137,19 +137,18 @@ ldconfig
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 
-if [ ! -d glim ]; then
-  git clone --recurse-submodules https://github.com/koide3/glim
-fi
+git clone --recurse-submodules https://github.com/koide3/glim
+git clone https://github.com/koide3/glim_ros2
 
-if [ ! -d glim_ros2 ]; then
-  git clone https://github.com/koide3/glim_ros2
-fi
+echo "[glim_ros2] applying custom glim_ros2 overlay"
+rm -rf glim_ros2
+cp -r /root/tmp/glim_ros2 glim_ros2
+rm -rf /root/tmp/glim_ros2
 
 cd ~/ros2_ws
 
-# copy custom cpp and cmake file
-cp -r /workspace/docker/glim/glim_ros2 /root/ros2_ws/src/glim_ros2
-
+source /opt/ros/${ROS_DISTRO}/setup.bash
+rosdep update && rosdep install --from-paths src --ignore-src -r -y
 colcon build \
   --symlink-install \
   --cmake-args \
@@ -160,7 +159,7 @@ colcon build \
 # =====================================
 echo "[cleanup] removing build source directories to reduce image size"
 
-rm -rf \
+cd /root && rm -rf \
   gtsam \
   iridescence \
   gtsam_points
