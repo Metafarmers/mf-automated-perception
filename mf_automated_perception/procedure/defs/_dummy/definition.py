@@ -16,20 +16,28 @@ class Dummy(ProcedureBase):
   version: ClassVar[str] = "1.0.0"
   docker_image: ClassVar[str] = 'mf-mantis-eye'
   docker_image_tag: ClassVar[str] = 'latest'
-  ParamModel: ClassVar[Optional[Type]] = DummyConfig
+  ParamModel: ClassVar[Optional[Type[BaseModel]]] = DummyConfig
   description: ClassVar[str] = "Dummy procedure for testing purposes."
-  input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  required_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("dummy", )
 
   def _run(
     self,
     *,
-    input_grains: Dict[GrainKey, GrainBase],
-    output_grain: GrainBase,
+    input_grains: Optional[Dict[GrainKey, GrainBase]],
+    output_grain: Optional[GrainBase],
     config,
     logger,
   ) -> None:
     logger.info("Running Dummy procedure")
+
+    if input_grains:
+      raise RuntimeError(
+        f"{self.key}: input_grains should be empty, got: {list(input_grains.keys())}"
+      )
+    if output_grain is None:
+      raise RuntimeError(f"{self.key}: output_grain must be provided.")
 
     # output grain DB open
     conn = output_grain.open()

@@ -31,7 +31,7 @@ def test_grain_factory_full_cycle(temp_grain_root):
   # --------------------------------------------------
   # 1. list grains
   # --------------------------------------------------
-  keys = GrainFactory.list_keys()
+  keys = GrainFactory.list_grains()
 
   assert isinstance(keys, tuple)
   assert len(keys) > 0
@@ -63,7 +63,7 @@ def test_grain_factory_full_cycle(temp_grain_root):
 
   grain.summarize_db(max_rows=1)
 
-  assert grain.grain_data_dir.exists()
+  assert grain.grain_data_dir_abs.exists()
   grain.delete()
 
   # --------------------------------------------------
@@ -81,9 +81,9 @@ def test_grain_factory_full_cycle(temp_grain_root):
 
     grain.create()
     assert grain.is_created
-    assert grain.grain_data_dir.exists()
+    assert grain.grain_data_dir_abs.exists()
 
     grain.close()
-    assert grain.grain_data_dir.exists()
+    assert grain.grain_data_dir_abs.exists()
     grain.delete()
 

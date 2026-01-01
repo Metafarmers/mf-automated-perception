@@ -12,6 +12,6 @@ class RawRosbagDecoded(GrainBase):
 
   SCHEMA_FILES: Tuple[str, ...] = (
     "001_init_v1.sql",
-    "101_images_v1.sql",
-    "102_pointclouds_v1.sql",
+    "101_image_v1.sql",
+    "102_pointcloud_v1.sql",
   )

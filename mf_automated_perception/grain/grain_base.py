@@ -8,8 +8,8 @@ from typing import Any, ClassVar, Iterable, List, Optional, Tuple
 from pydantic import BaseModel, PrivateAttr
 
 from mf_automated_perception.env import (
-  GIT_COMMIT_HASH, 
-  GRAIN_DATA_ROOT, 
+  GIT_COMMIT_HASH,
+  GRAIN_DATA_ROOT,
   BASE_SCHEMA_ROOT
 )
 from mf_automated_perception.grain.grain_manifest import GrainManifest
@@ -82,27 +82,43 @@ class GrainBase(ABC, BaseModel):
     return self._grain_id
 
 
+  # rel path starts from (grain_data_dir), which is defined by env vars both in host and docker container
   @property
-  def grain_data_dir(self) -> Path:
+  def grain_data_dir_abs(self) -> Path:
     return self.grain_data_root.joinpath(*self.key) / self.grain_id
 
   @property
-  def db_path(self) -> Path:
-    return self.grain_data_dir / "data.db3"
+  def grain_data_dir_rel(self) -> Path:
+    return Path(*self.key) / self.grain_id
 
   @property
-  def manifest_path(self) -> Path:
-    return self.grain_data_dir / "manifest.json"
+  def db_path_abs(self) -> Path:
+    return self.grain_data_dir_abs / "data.db3"
+
+  @property
+  def db_path_rel(self) -> Path:
+    return self.grain_data_dir_rel / "data.db3"
+
+  @property
+  def manifest_path_abs(self) -> Path:
+    return self.grain_data_dir_abs / "manifest.json"
+
+  @property
+  def manifest_path_rel(self) -> Path:
+    return self.grain_data_dir_rel / "manifest.json"
+
+
+  @property
+  def schema_dir_abs(self) -> Path:
+    return self.grain_data_dir_abs / "schema"
+
+  @property
+  def schema_dir_rel(self) -> Path:
+    return self.grain_data_dir_rel / "schema"
 
   @property
   def is_created(self) -> bool:
     return self._is_created
-  
-  @property
-  def schema_dir(self) -> Path:
-    return self.grain_data_dir / "schema"
-
-
   # ===============================================================
   # manifest access (read-only)
   # ===============================================================
@@ -156,13 +172,13 @@ class GrainBase(ABC, BaseModel):
         "create() requires provenance to be set via set_provenance()"
       )
 
-    grain_dir = self.grain_data_dir
+    grain_dir = self.grain_data_dir_abs
     grain_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = grain_dir / "data.db3"
     sqlite3.connect(db_path).close()
 
-    self.manifest_path.write_text(
+    self.manifest_path_abs.write_text(
       self._manifest.model_dump_json(indent=2)
     )
 
@@ -175,7 +191,7 @@ class GrainBase(ABC, BaseModel):
     if not self.SCHEMA_FILES:
       return
 
-    schema_dir = self.schema_dir
+    schema_dir = self.schema_dir_abs
     schema_dir.mkdir(parents=True, exist_ok=True)
 
     conn = self.open()
@@ -202,10 +218,10 @@ class GrainBase(ABC, BaseModel):
   # ===============================================================
   # database access
   # ===============================================================
-
   def open(self) -> sqlite3.Connection:
     if self._conn is None:
-      self._conn = sqlite3.connect(self.db_path)
+      self._conn = sqlite3.connect(self.db_path_abs)
+      self._conn.row_factory = sqlite3.Row
     return self._conn
 
   def close(self) -> None:
@@ -248,7 +264,7 @@ class GrainBase(ABC, BaseModel):
         "delete() requires database connection to be closed"
       )
 
-    grain_dir = self.grain_data_dir
+    grain_dir = self.grain_data_dir_abs
 
     if not grain_dir.exists():
       raise FileNotFoundError(
@@ -257,11 +273,11 @@ class GrainBase(ABC, BaseModel):
 
     if not force:
       # minimal safety checks
-      if not self.manifest_path.exists():
+      if not self.manifest_path_abs.exists():
         raise RuntimeError(
           f"manifest.json not found in grain directory: {grain_dir}"
         )
-      if not self.db_path.exists():
+      if not self.db_path_abs.exists():
         raise RuntimeError(
           f"data.db3 not found in grain directory: {grain_dir}"
         )
@@ -337,17 +353,15 @@ class GrainBase(ABC, BaseModel):
     grain._grain_id = grain_data_dir.name
 
     # prevent schema re-application
-    grain.SCHEMA_FILES = []
-
+    grain.SCHEMA_FILES = tuple(manifest.schema_files)
     return grain
-
 
 
   def list_tables(self) -> List[str]:
     if not self._is_created:
       raise RuntimeError("list_tables() requires created grain")
 
-    conn = sqlite3.connect(self.db_path)
+    conn = sqlite3.connect(self.db_path_abs)
     try:
       rows = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table';"
@@ -363,7 +377,7 @@ class GrainBase(ABC, BaseModel):
     if not self._is_created:
       raise RuntimeError("get_schema_sql() requires created grain")
 
-    schema_dir = self.schema_dir
+    schema_dir = self.schema_dir_abs
     print('schema_dir: ', schema_dir)
     if not schema_dir.exists():
       return ""
@@ -381,13 +395,11 @@ class GrainBase(ABC, BaseModel):
     if not self._is_created:
       raise RuntimeError("get_schema_files() requires created grain")
 
-    schema_dir = self.schema_dir
+    schema_dir = self.schema_dir_abs
     if not schema_dir.exists():
       return []
 
     return sorted(p.name for p in schema_dir.glob("*.sql"))
-
-
 
   def table_view(
     self,
@@ -398,15 +410,14 @@ class GrainBase(ABC, BaseModel):
     if not self._is_created:
       raise RuntimeError("table_view() requires created grain")
 
-    conn = sqlite3.connect(self.db_path)
-    conn.row_factory = sqlite3.Row
+    self.open()
     try:
-      return conn.execute(
+      return self._conn.execute(
         f"SELECT * FROM {table} LIMIT ?;",
         (limit,),
       ).fetchall()
     finally:
-      conn.close()
+      self.close()
 
   def dict_view(
     self,
@@ -459,10 +470,31 @@ class GrainBase(ABC, BaseModel):
         print(f"... ({total - max_rows} more rows)")
 
   def count_rows(self, table: str) -> int:
-    conn = sqlite3.connect(self.db_path)
+    conn = sqlite3.connect(self.db_path_abs)
     try:
       cur = conn.execute(f"SELECT COUNT(*) FROM {table}")
       return cur.fetchone()[0]
     finally:
       conn.close()
 
+  def list_column_names(
+    self,
+    *,
+    table: str,
+  ) -> list[str]:
+    if not self._is_created:
+      raise RuntimeError("list_column_names() requires created grain")
+
+    conn = sqlite3.connect(self.db_path_abs)
+    conn.row_factory = sqlite3.Row
+    try:
+      rows = conn.execute(
+        f"PRAGMA table_info({table});"
+      ).fetchall()
+
+      if not rows:
+        raise ValueError(f"{table} is not a valid table or view")
+
+      return [row["name"] for row in rows]
+    finally:
+      conn.close()

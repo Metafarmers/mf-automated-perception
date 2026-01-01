@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from mf_automated_perception.realtime.sync.time_utils import (
   SensorBuffer,
   SensorEntry,
-  to_ns,
+  to_nsec,
 )
+
+SnapshotTimeline = Dict[int, Dict[str, SensorEntry]]
 
 # ==================================================
 # interpolation
@@ -187,7 +189,7 @@ class SyncEngine:
   def sync_over_pivot_sensor(
     self,
     pivot_sensor_name: str,
-  ) -> tuple[Dict[int, Dict[str, SensorEntry]], Optional[str]]:
+  ) -> tuple[SnapshotTimeline, Optional[str]]:
     """
     Sync using anchor times derived from a pivot sensor,
     constrained to the temporal intersection of all sensors.
@@ -241,7 +243,6 @@ class SyncEngine:
 
     for anchor_ns in anchor_time_queue:
       decisions, error = self.sync_at(anchor_ns=anchor_ns)
-      print(f"anchor_ns={anchor_ns}, decisions={decisions}, error={error}")
 
       if decisions is None:
         latest_error = error
@@ -263,3 +264,66 @@ class SyncEngine:
       )
 
     return results, None
+
+# helper for snapshot grain
+def load_sync_results_from_snapshot_db(
+  *,
+  snapshot_grain,
+) -> SnapshotTimeline:
+  """
+  Load sync results from snapshot DB.
+
+  Returns:
+    Dict[anchor_ns, Dict[sensor_name, SensorEntry]]
+  """
+  from mf_automated_perception.grain.defs.snapshot import Snapshot
+  from mf_automated_perception.realtime.datatypes.image import MfImage
+  if not isinstance(snapshot_grain, Snapshot):
+    raise TypeError("Expected Snapshot grain")
+
+  # ret
+  results: Dict[int, Dict[str, SensorEntry]] = {}
+
+  # dict view
+  snapshot_db = snapshot_grain.dict_view(table='snapshot', limit=-1)
+
+  # snapshot_id, anchor_timestamp_sec, anchor_timestamp_nsec
+  conn = snapshot_grain.open()
+  for snapshot in snapshot_db:
+    snapshot_id = snapshot["snapshot_id"]
+
+    anchor_ns = to_nsec(
+      snapshot["anchor_timestamp_sec"],
+      snapshot["anchor_timestamp_nsec"],
+    )
+
+    results[anchor_ns] = {}
+
+    items = conn.execute(
+      """
+      SELECT sensor_name,
+             payload_table_name,
+             payload_id
+      FROM snapshot_item
+      WHERE snapshot_id = ?
+      ORDER BY sensor_name
+      """,
+      (snapshot_id,),
+    ).fetchall()
+
+    for item in items:
+      sensor_name, payload_table_name, payload_id = item
+
+      if payload_table_name == "image":
+        entry = MfImage.load_sensor_entry_from_db(
+          conn=conn,
+          image_id=payload_id,
+        )
+      else:
+        raise NotImplementedError(
+          f"Unsupported payload_table_name: {payload_table_name}"
+        )
+
+      results[anchor_ns][sensor_name] = entry
+
+  return results

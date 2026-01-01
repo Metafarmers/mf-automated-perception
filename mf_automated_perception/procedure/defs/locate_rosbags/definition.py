@@ -64,9 +64,10 @@ class LocateRosbags(ProcedureBase):
   version: ClassVar[str] = "0.0.1"
   docker_image: ClassVar[str] = 'mf-mantis-eye'
   docker_image_tag: ClassVar[str] = 'latest'
-  ParamModel: ClassVar[Optional[Type]] = LocateRosbagsConfig
+  ParamModel: ClassVar[Optional[Type[BaseModel]]] = LocateRosbagsConfig
   description: ClassVar[str] = "Locate ROS2 rosbags and store their paths as raw grains."
-  input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  required_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
 
   def write_results_to_db(
@@ -111,12 +112,19 @@ class LocateRosbags(ProcedureBase):
   def _run(
     self,
     *,
-    input_grains: Dict[GrainKey, GrainBase],
-    output_grain: GrainBase,
+    input_grains: Optional[Dict[GrainKey, GrainBase]],
+    output_grain: Optional[GrainBase],
     config,
     logger,
   ) -> None:
     logger.debug('########################')
+    if input_grains:
+      raise RuntimeError(
+        f"{self.key}: input_grains should be empty, got: {list(input_grains.keys())}"
+      )
+
+    if output_grain is None:
+      raise RuntimeError(f"{self.key}: output_grain must be provided")
 
     root = Path(config.search_root)
     if not root.is_dir():

@@ -1,11 +1,83 @@
-from pathlib import Path
+import json
 from typing import ClassVar, Dict, List, Optional, Tuple, Type
 
-import yaml
 from pydantic import BaseModel
 
 from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
 from mf_automated_perception.procedure.core.procedure_base import ProcedureBase
+from mf_automated_perception.realtime.datatypes.image import MfImage
+from mf_automated_perception.realtime.sync.engine import SyncEngine
+from mf_automated_perception.realtime.sync.time_utils import nsec_to_sec_nsec
+
+
+def images_load_from_grain(input_grain, target_sensor_names: List[str]) -> Dict[str, List[MfImage]]:
+  """
+  Load all rows from image table and convert to MfImage list.
+  """
+  rows = input_grain.dict_view(table="image", limit=-1)
+
+  images: dict[str, List[MfImage]] = {}
+
+  for row in rows:
+    # handle sensor_name indexing
+    sensor_name = row["sensor_name"]
+    if sensor_name not in target_sensor_names:
+      continue
+    if sensor_name not in images:
+      images[sensor_name] = []
+    d = dict(row)
+
+    # JSON decode camera params if present
+    if d.get("K") is not None:
+      d["K"] = json.loads(d["K"])
+    if d.get("D") is not None:
+      d["D"] = json.loads(d["D"])
+
+    images[sensor_name].append(MfImage.from_dict(d))
+
+  return images
+
+def image_insert_and_return_id(
+  *,
+  conn,
+  img: MfImage,
+) -> int:
+  """
+  Insert one MfImage into image table and return image_id.
+  """
+
+  cur = conn.execute(
+    """
+    INSERT INTO image (
+      sensor_name,
+      timestamp_sec,
+      timestamp_nsec,
+
+      path_to_raw,
+      width,
+      height,
+      encoding,
+      K,
+      D
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+    (
+      img.sensor_name,
+      img.timestamp_sec,
+      img.timestamp_nsec,
+
+      img.path_to_raw,
+      img.width,
+      img.height,
+      img.encoding,
+      json.dumps(img.K) if img.K is not None else None,
+      json.dumps(img.D) if img.D is not None else None,
+    ),
+  )
+
+  return cur.lastrowid
+
 
 
 class RunSyncEngineConfig(BaseModel):
@@ -13,154 +85,134 @@ class RunSyncEngineConfig(BaseModel):
   pivot_sensor_name: str
   max_time_diff_sec_dict: Dict[str, float]
 
-
-
 class RunSyncEngine(ProcedureBase):
   key: ClassVar[str] = "run_sync_engine"
   version: ClassVar[str] = "0.0.1"
   docker_image: ClassVar[str] = 'mf-mantis-eye'
   docker_image_tag: ClassVar[str] = 'latest'
-  ParamModel: ClassVar[Optional[Type]] = RunSyncEngineConfig
-  description: ClassVar[str] = "Time-sync grains from multiple (not limited to) sensory data  "
-  input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
-  output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "path")
-
-  def write_results_to_db(
-    self,
-    *,
-    grain_out: GrainBase,
-    results: List[Dict],
-    logger,
-  ) -> None:
-    if not results:
-      logger.info("No results to write into DB")
-      return
-
-    conn = grain_out.open()
-    try:
-      cur = conn.cursor()
-
-      for r in results:
-        try:
-          cur.execute(
-            """
-            INSERT OR REPLACE INTO path_to_raw
-              (bag_dir, storage_identifier, detected_by)
-            VALUES (?, ?, ?)
-            """,
-            (
-              r["bag_dir"],
-              r["storage_identifier"],
-              r["detected_by"],
-            ),
-          )
-        except Exception as e:
-          logger.error(f"Failed to insert {r}: {e}")
-
-      conn.commit()
-      logger.info(f"Wrote {len(results)} rows into path_to_raw")
-
-    finally:
-      grain_out.close()
+  ParamModel: ClassVar[Optional[Type[BaseModel]]] = RunSyncEngineConfig
+  description: ClassVar[str] = "Time-sync grains from multiple (but not limited to) sensory data  "
+  required_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = \
+    (('raw', 'rosbag', 'decoded'), ('yolo', 'detections'),)
+  output_grain_key: ClassVar[GrainKey] = ('snapshot',)
 
 
   def _run(
     self,
     *,
-    input_grains: Dict[GrainKey, GrainBase],
-    output_grain: GrainBase,
-    config,
+    input_grains: Optional[Dict[GrainKey, GrainBase]],
+    output_grain: Optional[GrainBase],
+    config: RunSyncEngineConfig,
     logger,
   ) -> None:
-    logger.debug('########################')
+    if input_grains is None:
+      raise RuntimeError(f"{self.key}: input_grains must be provided")
+    if output_grain is None:
+      raise RuntimeError(f"{self.key}: output_grain must be provided")
 
-    root = Path(config.search_root)
-    if not root.is_dir():
-      raise ValueError(f"Invalid search_root: {root}")
+    pivot_sensor = config.pivot_sensor_name
+    if pivot_sensor not in config.target_sensor_names:
+      raise ValueError(f'pivot_sensor_name {pivot_sensor} not in target_sensor_names')
 
-    results: List[Dict] = []
+    input_grain: GrainBase = input_grains[('raw', 'rosbag', 'decoded')]
+    logger.info(f'table names: {input_grain.list_tables()}')
 
-    leaf_dirs = find_leaf_directories(root)
-    logger.info(f"Found {len(leaf_dirs)} leaf directories under {root}")
-    # for l in leaf_dirs:
-    #   logger.debug(f"Leaf dir: {l}")
+    #['image_id', 'timestamp_sec', 'timestamp_nsec', 'sensor_name', 'path_to_raw', 'width', 'height', 'encoding', 'K', 'D']
+    # logger.info(f'columns in images table: {input_grain.list_column_names(table="images")}')
 
-    for leaf in leaf_dirs:
-      db3_files = list(leaf.glob("*.db3"))
-      mcap_files = list(leaf.glob("*.mcap"))
+    # to python instance
+    all_mf_images = images_load_from_grain(input_grain, config.target_sensor_names)
+    logger.info(f'loaded image sensor names: {list(all_mf_images.keys())}')
 
-      if not db3_files and not mcap_files:
-        continue
+    # sync engine
+    sync_engine = SyncEngine()
 
-      # ---------- determine storage_identifier by file extension ----------
-      if db3_files and mcap_files:
-        logger.error(
-          f"Mixed rosbag formats found in {leaf}: "
-          f"{len(db3_files)} *.db3, {len(mcap_files)} *.mcap. Abort this directory."
+    # register sensors
+    for sensor_name in config.target_sensor_names:
+      max_time_diff_sec = config.max_time_diff_sec_dict[sensor_name]
+      sync_engine.register_sensor(
+        sensor_name=sensor_name,
+        sensor_type='camera',
+        max_dt_ns=int(max_time_diff_sec * 1e9),
+      )
+
+    # add samples
+    for sensor_name, mf_images in all_mf_images.items():
+      if sensor_name not in config.target_sensor_names:
+        raise ValueError(f'sensor_name {sensor_name} not in target_sensor_names. It supposed to be filtered previously.')
+      for img in mf_images:
+        sync_engine.add_sample(
+          sensor_name=sensor_name,
+          sec=img.timestamp_sec,
+          nsec=img.timestamp_nsec,
+          payload=img,
         )
-        continue
 
-      if db3_files:
-        storage_id = "sqlite3"
-      elif mcap_files:
-        storage_id = "mcap"
-      else:
-        logger.debug("How do you see this?")
-        continue
+    # perform sync
+    synced, error = sync_engine.sync_over_pivot_sensor(pivot_sensor_name=pivot_sensor)
+    if synced is None:
+      logger.info(f'sync failed: {error}. No results to write.')
 
-      logger.debug(
-        f"Detected rosbag storage format in {leaf}: {storage_id}"
-      )
+    logger.info(f'synced count: {len(synced)}')
 
-      # ---------- metadata handling ----------
-      metadata_path = leaf / "metadata.yaml"
-      detected_by = "metadata"
+    conn = output_grain.open()
 
-      if not metadata_path.exists():
-        logger.info(f"metadata.yaml not found in {leaf}, trying reindex")
+    try:
+      for anchor_ns, sync_decisions in synced.items():
+        anchor_sec, anchor_nsec = nsec_to_sec_nsec(anchor_ns)
 
-        if not try_rosbag_reindex(leaf, logger):
-          continue
-        detected_by = "reindex"
+        # --------------------------------------------------
+        # snapshot
+        # --------------------------------------------------
+        cur = conn.execute(
+          """
+          INSERT INTO snapshot (
+            anchor_timestamp_sec,
+            anchor_timestamp_nsec
+          )
+          VALUES (?, ?)
+          """,
+          (
+            anchor_sec,
+            anchor_nsec,
+          ),
+        )
+        snapshot_id = cur.lastrowid
 
-        if not metadata_path.exists():
-          logger.debug(f"reindex did not generate metadata.yaml in {leaf}")
-          continue
+        # --------------------------------------------------
+        # snapshot_item per sensor
+        # --------------------------------------------------
+        for sensor_name, decision in sync_decisions.items():
+          img: MfImage = decision.payload
 
-      try:
-        with metadata_path.open("r") as f:
-          metadata = yaml.safe_load(f)
-      except Exception as e:
-        logger.debug(f"Failed to load metadata.yaml in {leaf}: {e}")
-        continue
+          # 1) payload 저장
+          image_id = image_insert_and_return_id(
+            conn=conn,
+            img=img,
+          )
 
-      # ---------- sanity check ----------
-      try:
-        msg_count = metadata["rosbag2_bagfile_information"]["message_count"]
-      except KeyError:
-        logger.debug(f"message_count not found in metadata.yaml in {leaf}")
-        continue
+          # 2) snapshot_item 라우팅
+          conn.execute(
+            """
+            INSERT INTO snapshot_item (
+              snapshot_id,
+              sensor_name,
+              payload_table_name,
+              payload_id
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+              snapshot_id,
+              sensor_name,
+              "image",
+              image_id,
+            ),
+          )
 
-      logger.debug(
-        f"Found valid rosbag directory: {leaf} "
-        f"storage={storage_id}, messages={msg_count}"
-      )
+      conn.commit()
 
-      results.append(
-        {
-          "bag_dir": str(leaf),
-          "storage_identifier": storage_id,
-          "detected_by": detected_by,
-        }
-      )
-
-
-    # logger.info(f'n results: {len(results)}')
-    # for r in results:
-    #   logger.debug(r)
-    self.write_results_to_db(
-      grain_out=output_grain,
-      results=results,
-      logger=logger,
-    )
+    finally:
+      output_grain.close()
 

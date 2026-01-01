@@ -27,9 +27,9 @@ def test_dummy_grain_create_load_and_schema_roundtrip(tmp_path):
   grain.create()
 
   assert grain.is_created
-  assert grain.grain_data_dir.exists()
-  assert grain.db_path.exists()
-  assert grain.manifest_path.exists()
+  assert grain.grain_data_dir_abs.exists()
+  assert grain.db_path_abs.exists()
+  assert grain.manifest_path_abs.exists()
 
   # --------------------------------------------------
   # 2. schema should already be applied
@@ -76,7 +76,7 @@ def test_dummy_grain_create_load_and_schema_roundtrip(tmp_path):
   # 6. reload grain from disk
   # --------------------------------------------------
   loaded_grain = Dummy.load_from_dir(
-    grain_data_dir=grain.grain_data_dir
+    grain_data_dir=grain.grain_data_dir_abs
   )
 
   # --------------------------------------------------
@@ -110,4 +110,4 @@ def test_dummy_grain_create_load_and_schema_roundtrip(tmp_path):
   # 7. cleanup
   # --------------------------------------------------
   loaded_grain.delete()
-  assert not grain.grain_data_dir.exists()
+  assert not grain.grain_data_dir_abs.exists()

@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS ply (
+  ply_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  rosbag_path TEXT NOT NULL UNIQUE,
+  path_to_raw TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ply_rosbag
+ON ply(rosbag_path);

@@ -11,8 +11,10 @@ from rich.table import Table
 from mf_automated_perception.host.runtime.docker_runner import run_procedure
 from mf_automated_perception.procedure.core.procedure_factory import (
   ProcedureFactory,
-  ProcedureBase,
 )
+from mf_automated_perception.grain.grain_factory import GrainFactory
+from mf_automated_perception.env import PROJECT_ROOT
+
 
 class MfEyeCLI:
   """
@@ -94,13 +96,14 @@ def create_app(cli: MfEyeCLI) -> typer.Typer:
     """
     List available grains.
     """
-    cli.console.print("[bold]list-grains called[/bold]")
 
     table = Table(title="Grains")
-    table.add_column("KEY")
-    table.add_column("TYPE")
+    GrainFactory.build_registry()
+    detail = GrainFactory.list_grains()
 
-    table.add_row("raw_rosbag", "RawRosbagGrain")
+    table.add_column("KEY")
+    for d in detail:
+      table.add_row(','.join(d))
     cli.console.print(table)
 
   # -----------------------------------------------------------------
@@ -146,7 +149,6 @@ def create_app(cli: MfEyeCLI) -> typer.Typer:
 
     cli.console.print(f"Running procedure: {procedure_key}")
     cli.console.print(f"params = {params_path}")
-
 
     try:
       run_procedure(

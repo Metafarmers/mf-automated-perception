@@ -9,7 +9,7 @@ pip install -e .
 ## build images
 ``` 
 # currently supported image: [mf-mantis-eye]
-python3 build_docker.py --image_name mf-mantis-eye
+python3 build_docker.py --image_name [mf-mantis-eye | mf-mantis-eye]
 ```
 
 ## How to run

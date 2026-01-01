@@ -107,7 +107,7 @@ class GrainFactory:
       raise KeyError(f"Grain key not registered: {key}") from None
 
   @classmethod
-  def list_keys(cls) -> Tuple[GrainKey, ...]:
+  def list_grains(cls) -> Tuple[GrainKey, ...]:
     cls.build_registry()
     return tuple(cls._REGISTRY.keys())
 

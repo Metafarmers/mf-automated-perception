@@ -1,0 +1,3 @@
+yolo_model_config_file: 'hi'
+target_sensor_names:
+  - 'd405_rgb_lying_down'

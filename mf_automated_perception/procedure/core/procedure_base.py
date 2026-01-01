@@ -5,13 +5,10 @@ from typing import Any, ClassVar, Dict, Optional, Tuple, Type
 import yaml
 from pydantic import BaseModel
 
-from mf_automated_perception.env import GRAIN_DATA_ROOT
+from mf_automated_perception.env import PROJECT_ROOT
 from mf_automated_perception.grain.grain_base import (
   GrainBase,
   GrainKey,
-)
-from mf_automated_perception.grain.grain_factory import (
-  GrainFactory,
 )
 
 
@@ -34,9 +31,10 @@ class ProcedureBase(BaseModel, ABC):
   docker_image_tag: ClassVar[str]
   description: ClassVar[str] = ""
 
-  ParamModel: ClassVar[Optional[Type]] = None
+  ParamModel: ClassVar[Optional[Type[BaseModel]]]
 
-  input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  required_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
+  optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey]
 
   # default loading rule
@@ -56,104 +54,72 @@ class ProcedureBase(BaseModel, ABC):
   # execution
   # ===============================================================
 
-  def _resolve_inputs(
+  def _check_input_grains(
     self,
     *,
     input_grains: Optional[Dict[GrainKey, GrainBase]],
-    load_input_rule: Optional[str],
-  ) -> Dict[GrainKey, GrainBase]:
+  ) -> None:
     cls = self.__class__
 
-    rule = load_input_rule if load_input_rule is not None else cls.load_input_rule
-    requires_inputs = bool(cls.input_grain_keys)
+    required = set(cls.required_input_grain_keys)
+    optional = set(cls.optional_input_grain_keys)
+    allowed = required | optional
 
-    resolved: Dict[GrainKey, GrainBase] = {}
-
-    if rule == "latest":
-      if requires_inputs:
-        if input_grains is not None:
-          raise RuntimeError(
-            f"{cls.key}: input_grains must not be provided "
-            f"when load_input_rule='latest' "
-            f"(input_grain_keys={cls.input_grain_keys})"
-          )
-
-        grain_root = Path(GRAIN_DATA_ROOT)
-
-        for key in cls.input_grain_keys:
-          resolved[key] = GrainFactory.load_latest_grain(
-            key=key,
-            grain_data_root=grain_root,
-          )
-
-      return resolved
-
-    # ------------------------------------------
-    # explicit input mode
-    # ------------------------------------------
-    if requires_inputs:
-      if input_grains is None:
+    # -------------------------------------------------
+    # normalize input
+    # -------------------------------------------------
+    if input_grains is None:
+      if required:
         raise RuntimeError(
-          f"{cls.key}: input_grains must be provided explicitly "
-          f"when load_input_rule is None "
-          f"(input_grain_keys={cls.input_grain_keys})"
+          f"{cls.key}: input_grains must be provided "
+          f"(required_input_grain_keys={cls.required_input_grain_keys})"
+        )
+      return None
+
+    # -------------------------------------------------
+    # validate keys
+    # -------------------------------------------------
+    for key in input_grains.keys():
+      if key not in allowed:
+        raise RuntimeError(
+          f"{cls.key}: unexpected input grain key {key}, "
+          f"allowed_keys={tuple(allowed)}"
         )
 
-      return input_grains
-
-    # no inputs required
-    print()
-    return {}
-
+    # -------------------------------------------------
+    # validate required presence
+    # -------------------------------------------------
+    for key in required:
+      if key not in input_grains:
+        raise RuntimeError(
+          f"{cls.key}: missing required input grain key {key}"
+        )
 
   def run(
     self,
     *,
-    input_grains: Optional[Dict[GrainKey, GrainBase]] = None,
-    output_grain: GrainBase | None,
+    input_grains: Optional[Dict[GrainKey, GrainBase]],
+    output_grain: Optional[GrainBase],
     config_file: Path,
     context: Dict[str, Any],
     logger,
-    load_input_rule: Optional[str] = None,
   ) -> None:
     cls = self.__class__
 
-    # --------------------------------------------------
-    # resolve loading rule
-    # --------------------------------------------------
-    rule = load_input_rule if load_input_rule is not None else cls.load_input_rule
-
-    if input_grains is not None and len(input_grains) == 0: 
-      input_grains = None
-
-    if rule not in (None, "latest"):
-      raise ValueError(f"{cls.key}: unsupported load_input_rule={rule}")
-
-    resolved_inputs = self._resolve_inputs(
+    # check input grains
+    self._check_input_grains(
       input_grains=input_grains,
-      load_input_rule=load_input_rule,
     )
+    if context.get('creator') is None:
+      raise ValueError(f"{cls.key}: context['creator'] is required")
 
-    # --------------------------------------------------
-    # input grain contract validation
-    # --------------------------------------------------
-    expected = set(cls.input_grain_keys)
-    received = set(resolved_inputs.keys())
-
-    if expected != received:
-      raise ValueError(
-        f"{cls.key}: input grain keys mismatch "
-        f"(expected={expected}, received={received})"
-      )
-
-    # --------------------------------------------------
     # config validation
-    # --------------------------------------------------
-    #config_file
     params = None
     if cls.ParamModel is not None:
       if not config_file:
         raise ValueError(f"{cls.key}: config file is required")
+      if not config_file.is_absolute():
+        config_file = PROJECT_ROOT / config_file
       data = yaml.safe_load(config_file.read_text())
       params = self.ParamModel.model_validate(data)
 
@@ -170,11 +136,10 @@ class ProcedureBase(BaseModel, ABC):
       # --------------------------------------------------
       # output grain provenance
       # --------------------------------------------------
-      if context.get('creator') is None:
-        raise ValueError(f"{cls.key}: context['creator'] is required")
+      input_grain_keys = [] if not input_grains else list(input_grains.keys())
       output_grain.set_provenance(
         source_procedure=self.procedure_id,
-        source_grain_keys=list(resolved_inputs.keys()),
+        source_grain_keys=input_grain_keys,
         creator=context['creator'],
       )
       output_grain.create()
@@ -183,7 +148,7 @@ class ProcedureBase(BaseModel, ABC):
     # execute procedure logic
     # --------------------------------------------------
     self._run(
-      input_grains=resolved_inputs,
+      input_grains=input_grains,
       output_grain=output_grain,
       config=params,
       logger=logger,
@@ -197,8 +162,8 @@ class ProcedureBase(BaseModel, ABC):
   def _run(
     self,
     *,
-    input_grains: Dict[GrainKey, GrainBase],
-    output_grain: GrainBase,
+    input_grains: Optional[Dict[GrainKey, GrainBase]],
+    output_grain: Optional[GrainBase],
     config,
     logger,
   ) -> None:

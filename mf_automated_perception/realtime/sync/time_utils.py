@@ -13,7 +13,7 @@ MILLISEC_IN_NSEC  = 1_000_000
 MICROSEC_IN_NSEC  = 1_000
 
 
-def to_ns(sec: int, nsec: int) -> int:
+def to_nsec(sec: int, nsec: int) -> int:
   """
   Convert (sec, nsec) to nanoseconds.
   No normalization is done here.
@@ -21,6 +21,19 @@ def to_ns(sec: int, nsec: int) -> int:
   """
   return sec * SEC_IN_NSEC + nsec
 
+def to_sec(t_ns: int) -> float:
+  """
+  Convert nanoseconds to seconds (float).
+  """
+  return t_ns / SEC_IN_NSEC
+
+def nsec_to_sec_nsec(t_ns: int) -> Tuple[int, int]:
+  """
+  Convert nanoseconds to (sec, nsec).
+  """
+  sec = t_ns // SEC_IN_NSEC
+  nsec = t_ns % SEC_IN_NSEC
+  return sec, nsec
 
 # ==================================================
 # internal time-ordered entry
@@ -66,7 +79,7 @@ class SensorBuffer:
     """
     Insert payload with nanosecond timestamp, keeping time order.
     """
-    t_ns = to_ns(sec, nsec)
+    t_ns = to_nsec(sec, nsec)
     entry = SensorEntry(t_ns, payload)
     idx = bisect.bisect_right(self._entries, entry)
     self._entries.insert(idx, entry)
@@ -92,7 +105,7 @@ class SensorBuffer:
     if not self._entries:
       return None, None
 
-    anchor_ns = to_ns(anchor_sec, anchor_nsec)
+    anchor_ns = to_nsec(anchor_sec, anchor_nsec)
     dummy = SensorEntry(anchor_ns, None)
     idx = bisect.bisect_left(self._entries, dummy)
 

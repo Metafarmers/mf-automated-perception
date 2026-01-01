@@ -62,3 +62,6 @@ rerun.log
 # =========================
 Thumbs.db
 tmp_param.yaml
+docker/glim/glim_map
+params/ai
+**/*.ply

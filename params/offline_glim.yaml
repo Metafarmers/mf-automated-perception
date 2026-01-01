@@ -1,0 +1,2 @@
+livox_topic: "/livox/lidar"
+livox_imu_topic: "/livox/imu"

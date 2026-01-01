@@ -1,0 +1,5 @@
+target_sensor_names: ['d405_depth_lying_down', 'd405_rgb_lying_down']
+pivot_sensor_name: 'd405_depth_lying_down'
+max_time_diff_sec_dict: 
+  'd405_depth_lying_down': 0.05
+  'd405_rgb_lying_down': 0.05

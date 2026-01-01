@@ -17,5 +17,5 @@ class RawRosbagPath(GrainBase):
 
   SCHEMA_FILES: Tuple[str, ...] = (
     "001_init_v1.sql",
-    "901_path_to_raw_rosbags_v1.sql",
+    "901_path_to_raw_rosbag_v1.sql",
   )
