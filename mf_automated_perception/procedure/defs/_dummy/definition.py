@@ -1,4 +1,4 @@
-from typing import Any, ClassVar, Dict, Optional, Tuple, Type
+from typing import ClassVar, Optional, Tuple, Type, Dict
 
 from pydantic import BaseModel
 
@@ -8,67 +8,20 @@ from mf_automated_perception.procedure.core.procedure_base import (
   ProcedureBase,
 )
 
+
 class DummyConfig(BaseModel):
   dummy_param: str = "default_value"
 
 class Dummy(ProcedureBase):
+  """
+  Dummy procedure definition (import-safe).
+  """
   key: ClassVar[str] = "_dummy"
   version: ClassVar[str] = "1.0.0"
-  docker_image: ClassVar[str] = 'mf-mantis-eye'
-  docker_image_tag: ClassVar[str] = 'latest'
+  docker_image: ClassVar[str] = "mf-mantis-eye"
+  docker_image_tag: ClassVar[str] = "latest"
   ParamModel: ClassVar[Optional[Type[BaseModel]]] = DummyConfig
   description: ClassVar[str] = "Dummy procedure for testing purposes."
   required_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
-  output_grain_key: ClassVar[GrainKey] = ("dummy", )
-
-  def _run(
-    self,
-    *,
-    input_grains: Optional[Dict[GrainKey, GrainBase]],
-    output_grain: Optional[GrainBase],
-    config,
-    logger,
-  ) -> None:
-    logger.info("Running Dummy procedure")
-
-    if input_grains:
-      raise RuntimeError(
-        f"{self.key}: input_grains should be empty, got: {list(input_grains.keys())}"
-      )
-    if output_grain is None:
-      raise RuntimeError(f"{self.key}: output_grain must be provided.")
-
-    # output grain DB open
-    conn = output_grain.open()
-
-    try:
-      for i in range(3):
-        conn.execute(
-          """
-          INSERT INTO odometry (
-            timestamp_sec, timestamp_nsec,
-            px, py, pz,
-            qx, qy, qz, qw,
-            vx, vy, vz,
-            wx, wy, wz
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          """,
-          (
-            100 + i,
-            i * 100_000_000,
-            float(i),
-            float(i + 1),
-            float(i + 2),
-            0.0, 0.0, 0.0, 1.0,
-            0.1 * i, 0.2 * i, 0.3 * i,
-            0.01 * i, 0.02 * i, 0.03 * i,
-          ),
-        )
-
-      conn.commit()
-      logger.info("Dummy odometry rows inserted")
-
-    finally:
-      output_grain.close()
+  output_grain_key: ClassVar[GrainKey] = ("dummy",)

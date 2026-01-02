@@ -8,20 +8,9 @@ RUN apt-get update && apt-get install -y \
   git \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /workspace
-
-# repo 전체 복사
-COPY . /workspace
-
-# pip 업그레이드
-RUN python3 -m pip install --upgrade pip
-
-# mf_automated_perception 패키지 설치
-RUN pip install -e .
-
-# docker 전용 python deps 설치
-RUN pip install -r docker/mf-mantis-eye/requirements.txt
+  
+COPY docker/mf-mantis-eye/requirements.txt /tmp/requirements.txt
+RUN pip install -r /tmp/requirements.txt
 
 # ros 관련 system deps
 RUN apt-get update && \
@@ -36,6 +25,12 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/*
 
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+
+WORKDIR /workspace
+COPY . /workspace
+RUN python3 -m pip install --upgrade pip
+RUN pip install -e .
+
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=0

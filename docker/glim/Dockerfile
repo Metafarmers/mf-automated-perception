@@ -51,8 +51,6 @@ RUN apt-get update && apt-get install -y \
 # --------------------------------------------------
 RUN echo "source /opt/ros/humble/setup.bash" >> /etc/bash.bashrc
 
-WORKDIR /workspace
-COPY . /workspace
 RUN apt-get update && apt-get install -y \
   python3-pip \
   python3-setuptools \
@@ -66,8 +64,11 @@ COPY docker/glim/build_glim_in_docker.sh /root/build_glim_in_docker.sh
 COPY docker/glim/glim_ros2 /root/tmp/glim_ros2
 WORKDIR /root
 RUN /bin/bash -c "/root/build_glim_in_docker.sh"
+COPY docker/glim/build_glim_in_docker2.sh /root/build_glim_in_docker2.sh
+RUN /bin/bash -c "/root/build_glim_in_docker2.sh"
 
 WORKDIR /workspace
+COPY . /workspace
 RUN python3 -m pip install --upgrade pip
 RUN pip install -e .
 
@@ -78,5 +79,6 @@ RUN chmod +x /entrypoint.sh
 # Workspace
 # --------------------------------------------------
 WORKDIR /workspace
+ENTRYPOINT ["/entrypoint.sh"]
 
 CMD ["bash"]

@@ -1,4 +1,4 @@
-# mflib/perception/automated_perception/procedure/procedure_factory.py
+# mf_automated_perception/procedure/procedure_factory.py
 
 import importlib
 import pkgutil
@@ -16,6 +16,9 @@ class ProcedureFactory:
   _REGISTRY: Dict[str, Type[ProcedureBase]] = {}
   _BUILT: bool = False
 
+  # ============================================================
+  # registry build (definition only)
+  # ============================================================
   @classmethod
   def build_registry(cls) -> None:
     if cls._BUILT:
@@ -29,26 +32,22 @@ class ProcedureFactory:
     for modinfo in pkgutil.iter_modules(pkg.__path__):
       key = modinfo.name
 
-      # ------------------------------------------------------------
-      # allow __pycache__
-      # ------------------------------------------------------------
       if key == "__pycache__":
         continue
 
       module_path = f"{base_pkg}.{key}.definition"
       class_name = key_to_class_name(key)
 
-      # ------------------------------------------------------------
+      # -----------------------------
       # import definition
-      # ------------------------------------------------------------
+      # -----------------------------
       try:
         module = importlib.import_module(module_path)
       except ModuleNotFoundError as e:
-        # definition.py 자체가 없는 경우 vs 내부 import 에러 구분
         if e.name == module_path:
           errors.append(
             f"[{key}] missing definition.py "
-            f"(expected module '{module_path}')"
+            f"(expected '{module_path}')"
           )
         else:
           errors.append(
@@ -63,9 +62,9 @@ class ProcedureFactory:
         )
         continue
 
-      # ------------------------------------------------------------
+      # -----------------------------
       # class existence
-      # ------------------------------------------------------------
+      # -----------------------------
       if not hasattr(module, class_name):
         errors.append(
           f"[{key}] missing class '{class_name}' "
@@ -73,35 +72,28 @@ class ProcedureFactory:
         )
         continue
 
-      proc_cls = getattr(module, class_name)
+      proc_def_cls = getattr(module, class_name)
 
-      # ------------------------------------------------------------
-      # validate Procedure class
-      # ------------------------------------------------------------
+      # -----------------------------
+      # validate definition
+      # -----------------------------
       try:
-        cls._validate(proc_cls, key)
+        cls._validate_definition(proc_def_cls, key)
       except Exception as e:
         errors.append(
           f"[{key}] validation failed for "
-          f"{proc_cls.__module__}.{proc_cls.__name__}: {e}"
+          f"{proc_def_cls.__module__}.{proc_def_cls.__name__}: {e}"
         )
         continue
 
-      # ------------------------------------------------------------
-      # duplicate key
-      # ------------------------------------------------------------
       if key in cls._REGISTRY:
         errors.append(
-          f"[{key}] duplicate procedure key detected: "
-          f"{cls._REGISTRY[key]} vs {proc_cls}"
+          f"[{key}] duplicate procedure key detected"
         )
         continue
 
-      cls._REGISTRY[key] = proc_cls
+      cls._REGISTRY[key] = proc_def_cls
 
-    # --------------------------------------------------------------
-    # final decision
-    # --------------------------------------------------------------
     if errors:
       msg = (
         "Procedure registry build failed with the following errors:\n"
@@ -111,7 +103,9 @@ class ProcedureFactory:
 
     cls._BUILT = True
 
-
+  # ============================================================
+  # resolve implementation (lazy import)
+  # ============================================================
   @classmethod
   def resolve_class(cls, key: str) -> Type[ProcedureBase]:
     cls.build_registry()
@@ -122,15 +116,52 @@ class ProcedureFactory:
         f"Available: {sorted(cls._REGISTRY.keys())}"
       )
 
-    return cls._REGISTRY[key]
+    proc_def_cls = cls._REGISTRY[key]
 
+    impl_path = getattr(proc_def_cls, "implementation", None)
+    if impl_path is None:
+      # definition 자체가 실행 가능한 경우 (드문 케이스)
+      return proc_def_cls
+
+    try:
+      impl_module = importlib.import_module(impl_path)
+    except Exception as e:
+      raise RuntimeError(
+        f"Failed to import implementation module '{impl_path}' "
+        f"for procedure '{key}': {e}"
+      )
+
+    impl_class_name = f"{proc_def_cls.__name__}Impl"
+
+    if not hasattr(impl_module, impl_class_name):
+      raise RuntimeError(
+        f"Implementation class '{impl_class_name}' not found in "
+        f"module '{impl_path}'"
+      )
+
+    impl_cls = getattr(impl_module, impl_class_name)
+
+    if not issubclass(impl_cls, proc_def_cls):
+      raise TypeError(
+        f"{impl_cls.__module__}.{impl_cls.__name__} "
+        f"is not a subclass of {proc_def_cls.__name__}"
+      )
+
+    return impl_cls
+
+  # ============================================================
+  # utilities
+  # ============================================================
   @classmethod
   def list_procedures(cls) -> Dict[str, Type[ProcedureBase]]:
     cls.build_registry()
     return dict(cls._REGISTRY)
 
   @staticmethod
-  def _validate(proc_cls: Type[ProcedureBase], key: str) -> None:
+  def _validate_definition(
+    proc_cls: Type[ProcedureBase],
+    key: str,
+  ) -> None:
     if not issubclass(proc_cls, ProcedureBase):
       raise TypeError(
         f"{proc_cls.__module__}.{proc_cls.__name__} "
@@ -143,3 +174,9 @@ class ProcedureFactory:
         f"class defines key='{proc_cls.key}', "
         f"but directory name is '{key}'"
       )
+
+    # if hasattr(proc_cls, "_run"):
+    #   raise ValueError(
+    #     f"{proc_cls.__name__} defines _run(). "
+    #     f"Definition classes must not implement runtime logic."
+    #   )

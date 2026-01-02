@@ -2,10 +2,8 @@ from typing import Dict, List, Literal, Optional
 
 import cv2
 import numpy as np
-import torch
 import yaml
 from pydantic import BaseModel, Field
-from ultralytics import YOLO
 
 from mf_automated_perception.env import PROJECT_ROOT
 from mf_automated_perception.realtime.datatypes.yolo import (
@@ -93,6 +91,7 @@ def compute_iou_tlwh(a, b):
 
 class YoloUltralyticsWrapper:
   def __init__(self, logger, cfg_file):
+    from ultralytics import YOLO
     self.logger = logger
 
     with open(cfg_file, "r") as r:
@@ -118,6 +117,7 @@ class YoloUltralyticsWrapper:
 
   # resolve device string
   def _resolve_device(self, dev):
+    import torch
     if dev == "auto":
       return "cuda" if torch.cuda.is_available() else "cpu"
     return dev

@@ -2,7 +2,7 @@
 name = "mf-automated-perception"
 version = "0.1.0"
 description = "CLI and runner for automated perception procedures"
-requires-python = ">=3.10"
+requires-python = "==3.10.*"
 
 dependencies = [
   "typer>=0.12",
@@ -13,7 +13,8 @@ dependencies = [
   "pyyaml",
   "tqdm",
   "opencv-python==4.7.0.72",
-  "numpy==1.23.5"
+  "numpy==1.23.5",
+  "seaborn"
 ]
 
 [project.scripts]
@@ -22,7 +23,7 @@ mf-eye = "mf_automated_perception.host.cli.main:app"
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py311"
 
 select = [
   "E",  # pycodestyle errors
