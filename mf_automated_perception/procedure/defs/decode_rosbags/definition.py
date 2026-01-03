@@ -31,8 +31,3 @@ class DecodeRosbags(ProcedureBase):
   )
   optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("raw", "rosbag", "decoded")
-
-  # implementation pointer
-  implementation: ClassVar[str] = (
-    "mf_automated_perception.procedure.defs.decode_rosbags.implementation"
-  )

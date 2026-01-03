@@ -1,3 +1,5 @@
-yolo_model_config_file: 'hi'
+yolo_model_config_file: '/workspace/params/ai/strawberry2024DB.yaml'
 target_sensor_names:
   - 'd405_rgb_lying_down'
+save_images_with_detections: true
+save_images_step_size: 5

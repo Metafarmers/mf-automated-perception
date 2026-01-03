@@ -1,9 +1,9 @@
 import logging
 from pathlib import Path
+from mf_automated_perception.env import LOG_DIR_ROOT
 
 def get_logger(
   name: str,
-  file_dir: str | Path,
   level: int = logging.INFO,
 ) -> logging.Logger:
   logger = logging.getLogger(name)
@@ -24,7 +24,7 @@ def get_logger(
   logger.addHandler(console_handler)
 
   # ---- file handler ----
-  file_dir = Path(file_dir)
+  file_dir = LOG_DIR_ROOT / name
   file_dir.mkdir(parents=True, exist_ok=True)
 
   log_path = file_dir / f"{name}.log"

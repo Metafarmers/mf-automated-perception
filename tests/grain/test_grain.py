@@ -1,7 +1,7 @@
-from pathlib import Path
+import shutil
 
 from mf_automated_perception.grain.defs._dummy import Dummy
-from mf_automated_perception.grain.grain_base import GrainBase, GrainKey
+
 
 def test_dummy_grain_create_load_and_schema_roundtrip(tmp_path):
   """
@@ -110,4 +110,97 @@ def test_dummy_grain_create_load_and_schema_roundtrip(tmp_path):
   # 7. cleanup
   # --------------------------------------------------
   loaded_grain.delete()
+  assert not grain.grain_data_dir_abs.exists()
+
+def test_dummy_grain_create_with_given_uuid(tmp_path):
+  """
+  Test grain creation with externally provided UUID.
+  If a grain with the same UUID already exists, delete and recreate it.
+  """
+
+  # --------------------------------------------------
+  # test setup
+  # --------------------------------------------------
+  given_uuid = "deadbeef"
+
+  grain = Dummy()
+
+  grain.set_provenance(
+    source_procedure="dummy_test_uuid",
+    source_grain_keys=[],
+    creator="dummy_tester",
+  )
+
+  # --------------------------------------------------
+  # cleanup if grain with same UUID already exists
+  # --------------------------------------------------
+  key_path = grain.grain_data_root.joinpath(*grain.key)
+
+  if key_path.exists():
+    for p in key_path.iterdir():
+      if p.is_dir() and p.name.endswith(f"_{given_uuid}"):
+        shutil.rmtree(p)
+
+  # --------------------------------------------------
+  # create grain with given UUID
+  # --------------------------------------------------
+  grain.create(grain_uuid=given_uuid)
+
+  assert grain.is_created
+  assert grain.uuid == given_uuid
+  assert grain.grain_data_dir_abs.exists()
+  assert grain.grain_data_dir_abs.name.endswith(f"_{given_uuid}")
+
+  # --------------------------------------------------
+  # schema + DB sanity check
+  # --------------------------------------------------
+  tables = grain.list_tables()
+  assert "odometry" in tables
+
+  conn = grain.open()
+  conn.execute(
+    """
+    INSERT INTO odometry (
+      timestamp_sec, timestamp_nsec,
+      px, py, pz,
+      qx, qy, qz, qw,
+      vx, vy, vz,
+      wx, wy, wz
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """,
+    (
+      123, 0,
+      1.0, 2.0, 3.0,
+      0.0, 0.0, 0.0, 1.0,
+      0.1, 0.2, 0.3,
+      0.01, 0.02, 0.03,
+    ),
+  )
+  conn.commit()
+  grain.close()
+
+  assert grain.count_rows("odometry") == 1
+
+  # --------------------------------------------------
+  # reload grain from disk
+  # --------------------------------------------------
+  loaded = Dummy.load_from_dir(
+    grain_data_dir=grain.grain_data_dir_abs
+  )
+
+  assert loaded.is_created
+  assert loaded.uuid == given_uuid
+  assert loaded.grain_id == grain.grain_id
+  assert loaded.count_rows("odometry") == 1
+
+  # schema should persist
+  schema_sql = loaded.get_schema_sql()
+  assert "CREATE TABLE" in schema_sql
+  assert "odometry" in schema_sql
+
+  # --------------------------------------------------
+  # cleanup
+  # --------------------------------------------------
+  loaded.delete()
   assert not grain.grain_data_dir_abs.exists()

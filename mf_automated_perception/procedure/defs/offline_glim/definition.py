@@ -32,8 +32,3 @@ class OfflineGlim(ProcedureBase):
   )
   optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = ()
   output_grain_key: ClassVar[GrainKey] = ("slam3d", "glim")
-
-  # implementation pointer
-  implementation: ClassVar[str] = (
-    "mf_automated_perception.procedure.defs.offline_glim.implementation"
-  )

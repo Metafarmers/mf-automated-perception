@@ -2,7 +2,7 @@ import importlib
 import pkgutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type
 
 from mf_automated_perception.grain.grain_base import (
   GrainBase,
@@ -135,9 +135,80 @@ class GrainFactory:
 
     return candidates
 
+  @classmethod
+  def load_grain(
+    cls,
+    *,
+    key: GrainKey,
+    load_rule: str,
+    grain_data_root: Path,
+    uuid: Optional[str] = None,
+  ) -> Optional[GrainBase]:
+    """
+    Load grain based on rule.
+
+    Args:
+      key: Grain key tuple
+      load_rule: 'latest' or 'uuid'
+      grain_data_root: Root directory for grains (defaults to env var)
+      uuid: Required if load_rule='uuid'
+
+    Returns:
+      GrainBase instance or None if not found
+    """
+
+    if load_rule == "latest":
+      return cls._load_latest_grain(
+        key=key,
+        grain_data_root=grain_data_root)
+    elif load_rule == "uuid":
+      if uuid is None:
+        raise ValueError("uuid must be provided when load_rule='uuid'")
+      return cls._load_grain_by_uuid(
+        key=key,
+        uuid=uuid,
+        grain_data_root=grain_data_root)
+    else:
+      raise ValueError(f"Unknown load_rule: {load_rule}. Must be 'latest' or 'uuid'")
+
 
   @classmethod
-  def load_latest_grain(
+  def _load_grain_by_uuid(
+    cls,
+    *,
+    key: GrainKey,
+    uuid: str,
+    grain_data_root: Path = None,
+  ) -> Optional[GrainBase]:
+    """
+    Load specific grain instance by UUID.
+
+    Args:
+      key: Grain key tuple
+      uuid: Grain UUID to load
+      grain_data_root: Root directory for grains
+
+    Returns:
+      GrainBase instance or None if not found
+    """
+    cls.build_registry()
+    grain_class = cls.resolve_class(key)
+
+    # Construct grain directory pattern: /data/{key_parts}/*_{uuid}/
+    key_path = grain_data_root / Path(*key)
+
+    if not key_path.exists():
+      return None
+
+    # Search for directory matching *_{uuid}
+    for grain_dir in key_path.iterdir():
+      if grain_dir.is_dir() and grain_dir.name.endswith(f"_{uuid}"):
+        return grain_class.load_from_dir(grain_data_dir=grain_dir)
+
+    return None
+
+  @classmethod
+  def _load_latest_grain(
     cls,
     *,
     key: GrainKey,

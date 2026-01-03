@@ -1,21 +1,28 @@
 import sqlite3
 import uuid
 from abc import ABC
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from enum import Enum, auto
 from pathlib import Path
 from typing import Any, ClassVar, Iterable, List, Optional, Tuple
 
 from pydantic import BaseModel, PrivateAttr
 
 from mf_automated_perception.env import (
+  BASE_SCHEMA_ROOT,
   GIT_COMMIT_HASH,
   GRAIN_DATA_ROOT,
-  BASE_SCHEMA_ROOT
 )
 from mf_automated_perception.grain.grain_manifest import GrainManifest
+from mf_automated_perception.utils.time_utils import _KST, now
 
 GrainKey = Tuple[str, ...]
-KST = timezone(timedelta(hours=9))
+
+class GrainState(Enum):
+  NEW = auto()
+  PROVENANCE_SET = auto()
+  CREATED = auto()
+  OPEN = auto()
 
 
 class GrainBase(ABC, BaseModel):
@@ -38,6 +45,8 @@ class GrainBase(ABC, BaseModel):
   _conn: Optional[sqlite3.Connection] = PrivateAttr(default=None)
   _is_created: bool = PrivateAttr(default=False)
   _grain_id: Optional[str] = PrivateAttr(default=None)
+  _uuid: Optional[str] = PrivateAttr(default=None)
+  _state: GrainState = PrivateAttr(default=GrainState.NEW)
 
   # ===============================================================
   # pydantic hook
@@ -64,6 +73,19 @@ class GrainBase(ABC, BaseModel):
   # derived paths
   # ===============================================================
 
+  def _require_state(
+    self,
+    *,
+    allowed: tuple["GrainState", ...],
+    action: str,
+  ) -> None:
+    if self._state not in allowed:
+      raise RuntimeError(
+        f"{action}() not allowed in state {self._state.name}, "
+        f"allowed states: {[s.name for s in allowed]}"
+      )
+
+
   @property
   def grain_data_root(self) -> Path:
     return Path(GRAIN_DATA_ROOT)
@@ -73,13 +95,47 @@ class GrainBase(ABC, BaseModel):
     if self._grain_id is None:
       if self._manifest is None:
         raise RuntimeError("grain_id is not available before manifest is set")
+      if self._uuid is None:
+        raise RuntimeError("grain_id is not available before UUID is set")
 
       self._grain_id = (
-        f"{self._manifest.created_at.astimezone(KST).strftime('%Y-%m-%d_%H-%M-%S')}_"
-        f"{uuid.uuid4().hex[:8]}"
+        f"{self._manifest.created_at.astimezone(_KST).strftime('%Y-%m-%d_%H-%M-%S')}_"
+        f"{self._uuid}"
       )
 
     return self._grain_id
+
+
+  @property
+  def uuid(self) -> str:
+    """
+    Stable unique identifier for this grain.
+    Generated exactly once during creation.
+    """
+    if self._uuid is None:
+      raise RuntimeError("Grain UUID is not available before creation")
+    return self._uuid
+
+
+
+  def _check_uuid_collision(self) -> None:
+    """Check if any grain with same UUID already exists in grain_data_root."""
+    from mf_automated_perception.env import GRAIN_DATA_ROOT
+
+    target_uuid = self.uuid
+    key_path = GRAIN_DATA_ROOT / Path(*self.key)
+
+    if not key_path.exists():
+      return  # No grains of this type exist yet
+
+    # Search all grain directories for matching UUID
+    for grain_dir in key_path.iterdir():
+      if grain_dir.is_dir() and grain_dir.name.endswith(f"_{target_uuid}"):
+        raise RuntimeError(
+          f"UUID collision detected: {target_uuid}. "
+          f"Existing grain: {grain_dir}"
+        )
+
 
 
   # rel path starts from (grain_data_dir), which is defined by env vars both in host and docker container
@@ -129,6 +185,8 @@ class GrainBase(ABC, BaseModel):
       raise RuntimeError("Manifest has not been initialized")
     return self._manifest
 
+
+
   # ===============================================================
   # provenance API
   # ===============================================================
@@ -139,8 +197,14 @@ class GrainBase(ABC, BaseModel):
     source_procedure: str,
     source_grain_keys: Iterable[GrainKey],
     creator: str,
+    workflow_uuid: Optional[str] = None,
     created_at: Optional[datetime] = None,
   ) -> None:
+    self._require_state(
+      allowed=(GrainState.NEW,),
+      action="set_provenance",
+    )
+
     if self._is_created:
       raise RuntimeError(
         "set_provenance() must not be called after grain creation"
@@ -157,34 +221,56 @@ class GrainBase(ABC, BaseModel):
       source_procedure=source_procedure,
       source_grain_keys=[list(k) for k in source_grain_keys],
       creator=creator,
-      created_at=created_at or datetime.now(timezone.utc),
+      workflow_uuid=workflow_uuid,
+      created_at=created_at or now(),
       schema_files=list(self.SCHEMA_FILES),
     )
+
+    self._state = GrainState.PROVENANCE_SET
 
 
   # ===============================================================
   # lifecycle
   # ===============================================================
 
-  def create(self) -> None:
+  def create(
+    self,
+    *,
+    grain_uuid: Optional[str] = None,
+  ) -> None:
+    """Create grain directory and initialize database."""
+    self._require_state(
+      allowed=(GrainState.PROVENANCE_SET,),
+      action="create",
+    )
+
     if self._manifest is None:
       raise RuntimeError(
         "create() requires provenance to be set via set_provenance()"
       )
 
-    grain_dir = self.grain_data_dir_abs
-    grain_dir.mkdir(parents=True, exist_ok=True)
+    # 1. UUID 결정
+    if self._uuid is None:
+      if grain_uuid is not None:
+        self._uuid = grain_uuid
+      else:
+        self._uuid = uuid.uuid4().hex[:8]
 
-    db_path = grain_dir / "data.db3"
-    sqlite3.connect(db_path).close()
+    # 2. collision check
+    self._check_uuid_collision()
+
+    # 3. materialize
+    self.grain_data_dir_abs.mkdir(parents=True, exist_ok=True)
+    sqlite3.connect(self.db_path_abs).close()
 
     self.manifest_path_abs.write_text(
       self._manifest.model_dump_json(indent=2)
     )
 
-    self._initialize_schema()
     self._is_created = True
-    assert self._grain_id is not None
+
+    self._state = GrainState.CREATED
+    self._initialize_schema()
 
 
   def _initialize_schema(self) -> None:
@@ -219,6 +305,10 @@ class GrainBase(ABC, BaseModel):
   # database access
   # ===============================================================
   def open(self) -> sqlite3.Connection:
+    self._require_state(
+      allowed=(GrainState.CREATED, GrainState.OPEN),
+      action="open",
+    )
     if self._conn is None:
       self._conn = sqlite3.connect(self.db_path_abs)
       self._conn.row_factory = sqlite3.Row
@@ -228,6 +318,8 @@ class GrainBase(ABC, BaseModel):
     if self._conn is not None:
       self._conn.close()
       self._conn = None
+      self._state = GrainState.CREATED
+
 
   # ===============================================================
   # inspection
@@ -319,9 +411,11 @@ class GrainBase(ABC, BaseModel):
 
     # basic file checks
     if not manifest_path.exists():
-      raise FileNotFoundError(f"manifest.json not found: {manifest_path}")
+      print(f"loading {grain_data_dir} failed - manifest.json missing")
+      return None
     if not db_path.exists():
-      raise FileNotFoundError(f"data.db3 not found: {db_path}")
+      print(f"loading {grain_data_dir} failed - data.db3 missing")
+      return None
 
     manifest = GrainManifest.model_validate_json(
       manifest_path.read_text()
@@ -337,23 +431,27 @@ class GrainBase(ABC, BaseModel):
     # validate sealed schema
     if manifest.schema_files:
       if not schema_dir.exists():
-        raise RuntimeError(f"Schema directory missing: {schema_dir}")
+        print(f"Loading {grain_data_dir} failed - Schema directory missing")
+        return None
 
       missing = [
         name for name in manifest.schema_files
         if not (schema_dir / name).exists()
       ]
       if missing:
-        raise RuntimeError(f"Schema files missing: {missing}")
+        print(f"Loading {grain_data_dir} failed - Schema files missing: {missing}")
+        return None
 
     # restore grain state
     grain = cls()
     grain._manifest = manifest
     grain._is_created = True
     grain._grain_id = grain_data_dir.name
+    grain._uuid = grain_data_dir.name.split("_")[-1]
 
     # prevent schema re-application
     grain.SCHEMA_FILES = tuple(manifest.schema_files)
+    grain._state = GrainState.CREATED
     return grain
 
 
@@ -437,8 +535,10 @@ class GrainBase(ABC, BaseModel):
     tables: Optional[Iterable[str]] = None,
     max_rows: int = 5,
   ) -> None:
-    if not self._is_created:
-      raise RuntimeError("summarize_db() requires created grain")
+    self._require_state(
+      allowed=(GrainState.CREATED, GrainState.OPEN),
+      action="summarize_db",
+    )
 
     if tables is None:
       tables = self.list_tables()

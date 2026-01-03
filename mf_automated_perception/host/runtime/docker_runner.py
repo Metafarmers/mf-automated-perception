@@ -1,6 +1,9 @@
-from pathlib import Path
-import subprocess
+import json
 import os
+import subprocess
+from pathlib import Path
+
+from mf_automated_perception.procedure.core.procedure_base import ProcedureRunResult
 
 
 def run_procedure(
@@ -10,7 +13,7 @@ def run_procedure(
   creator: str,
   params_file: Path | None = None,
   bash: bool = False,
-) -> subprocess.CompletedProcess:
+) -> ProcedureRunResult:
   # --------------------------------------------------
   # host-side required envs
   # --------------------------------------------------
@@ -29,26 +32,23 @@ def run_procedure(
   host_external_data_root = Path(host_external_data_root).resolve()
   host_project_root = Path(host_project_root).resolve()
 
+  # --------------------------------------------------
   # docker run command
+  # --------------------------------------------------
   cmd: list[str] = [
     "docker", "run", "--rm", "--gpus", "all",
   ]
 
-  # interactive 옵션은 bash일 때만
   if bash:
     cmd += ["-it"]
 
-  # memory
   cmd += [
     "--ipc", "host",
     "-e", "QT_X11_NO_MITSHM=1",
   ]
 
   display = os.environ.get("DISPLAY", ":0")
-  xauth = os.environ.get("XAUTHORITY")
-
-  if xauth is None:
-    xauth = str(Path.home() / ".Xauthority")
+  xauth = os.environ.get("XAUTHORITY") or str(Path.home() / ".Xauthority")
 
   cmd += [
     "-e", f"DISPLAY={display}",
@@ -64,17 +64,18 @@ def run_procedure(
   ]
 
   # --------------------------------------------------
-  # env vars inside docker (env.py contract)
+  # env vars inside docker
   # --------------------------------------------------
   cmd += [
     "-e", "MF_GRAIN_DATA_ROOT=/data",
     "-e", "MF_BASE_SCHEMA_ROOT=/workspace/mf_automated_perception/grain/schema",
-    "-e", "MF_LOG_DIR_ROOT=/data/logs",
     "-e", "MF_EXTERNAL_DATA_ROOT=/external_data",
     "-e", "MF_PROJECT_ROOT=/workspace",
   ]
 
+  # --------------------------------------------------
   # container command
+  # --------------------------------------------------
   if bash:
     cmd += [
       docker_image,
@@ -92,9 +93,41 @@ def run_procedure(
         if params_file is not None
         else f"/workspace/params/{procedure}.yaml"
       ),
-      "--load-input-rule", "latest",
+      "--load-grain-rule", "latest",
     ]
 
-  out = subprocess.run(cmd, check=True)
-  print(f"Procedure '{procedure}' completed with return code: {out.returncode}")
-  return out
+  # --------------------------------------------------
+  # run docker (do not raise here)
+  # --------------------------------------------------
+  proc = subprocess.run(cmd, check=False)
+
+  # --------------------------------------------------
+  # read ProcedureRunResult
+  # --------------------------------------------------
+  metadata_file = host_grain_data_root / "logs" / "last_run.json"
+
+  if not metadata_file.exists():
+    raise RuntimeError(
+      f"last_run.json not found after running procedure '{procedure}'"
+    )
+
+  try:
+    data = json.loads(metadata_file.read_text())
+    result = ProcedureRunResult.model_validate(data)
+  except Exception as e:
+    raise RuntimeError(
+      f"Failed to parse last_run.json for procedure '{procedure}': {e}"
+    ) from None
+
+  # --------------------------------------------------
+  # docker-level failure fallback
+  # --------------------------------------------------
+  if proc.returncode != 0 and result.exit_code == 0:
+    result.exit_code = proc.returncode
+    result.status = "failed"
+    result.error_message = (
+      result.error_message
+      or f"Docker exited with code {proc.returncode}"
+    )
+
+  return result

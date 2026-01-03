@@ -11,6 +11,8 @@ from mf_automated_perception.procedure.core.procedure_base import ProcedureBase
 class RunYoloConfig(BaseModel):
   yolo_model_config_file: str
   target_sensor_names: List[str]
+  save_images_with_detections: bool
+  save_images_step_size: int
 
 
 class RunYolo(ProcedureBase):
@@ -31,9 +33,4 @@ class RunYolo(ProcedureBase):
   optional_input_grain_keys: ClassVar[Tuple[GrainKey, ...]] = (
     ("raw", "rosbag", "decoded"),
   )
-  output_grain_key: ClassVar[GrainKey] = ("snapshot",)
-
-  # implementation pointer
-  implementation: ClassVar[str] = (
-    "mf_automated_perception.procedure.defs.run_yolo.implementation"
-  )
+  output_grain_key: ClassVar[GrainKey] = ("detection2d", 'yolo')

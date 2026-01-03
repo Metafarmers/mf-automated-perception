@@ -85,10 +85,8 @@ class GPRunner:
     output_grain.create()
 
     # create logger
-    log_root = output_grain.log_root
     logger = get_logger(
       name=proc_cls.key,
-      file_dir=log_root,
       level=logging.DEBUG,
     )
 

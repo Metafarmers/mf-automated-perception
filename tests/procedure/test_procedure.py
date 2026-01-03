@@ -1,7 +1,7 @@
 from mf_automated_perception.env import LOG_DIR_ROOT
 from mf_automated_perception.grain.defs._dummy import Dummy as DummyGrain
-from mf_automated_perception.procedure.defs._dummy.definition import (
-  Dummy as DummyProcedure,
+from mf_automated_perception.procedure.defs.dummy.implementation import (
+  DummyImpl,
 )
 from mf_automated_perception.utils.gp_logger import get_logger
 
@@ -26,10 +26,9 @@ def test_dummy_procedure_end_to_end(tmp_path):
   # --------------------------------------------------
   # run procedure
   # --------------------------------------------------
-  proc = DummyProcedure()
+  proc = DummyImpl()
   logger = get_logger(
     name="ProcedureDummyTest",
-    file_dir=LOG_DIR_ROOT,
   )
   proc._run(
     input_grains=None,

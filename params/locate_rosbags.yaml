@@ -1,1 +1,2 @@
 search_root: /external_data
+only_most_recent_one: true

@@ -41,9 +41,9 @@ IS_HOST_ENV: Optional[bool] = _env_flag_optional("MF_IS_HOST_ENV")
 
 GRAIN_DATA_ROOT: Path = _require_path_env("MF_GRAIN_DATA_ROOT")
 BASE_SCHEMA_ROOT: Path = _require_path_env("MF_BASE_SCHEMA_ROOT")
-LOG_DIR_ROOT: Path = _require_path_env("MF_LOG_DIR_ROOT")
 EXTERNAL_DATA_ROOT: Path = _require_path_env("MF_EXTERNAL_DATA_ROOT")
 PROJECT_ROOT: Path = _require_path_env("MF_PROJECT_ROOT")
+LOG_DIR_ROOT: Path = GRAIN_DATA_ROOT / "logs"
 
 
 # ==================================================

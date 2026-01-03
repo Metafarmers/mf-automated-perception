@@ -32,7 +32,7 @@ class ProcedureFactory:
     for modinfo in pkgutil.iter_modules(pkg.__path__):
       key = modinfo.name
 
-      if key == "__pycache__":
+      if key.startswith("_") or key == "__pycache__":
         continue
 
       module_path = f"{base_pkg}.{key}.definition"
@@ -104,7 +104,7 @@ class ProcedureFactory:
     cls._BUILT = True
 
   # ============================================================
-  # resolve implementation (lazy import)
+  # resolve implementation (folder convention)
   # ============================================================
   @classmethod
   def resolve_class(cls, key: str) -> Type[ProcedureBase]:
@@ -118,25 +118,30 @@ class ProcedureFactory:
 
     proc_def_cls = cls._REGISTRY[key]
 
-    impl_path = getattr(proc_def_cls, "implementation", None)
-    if impl_path is None:
-      # definition 자체가 실행 가능한 경우 (드문 케이스)
-      return proc_def_cls
+    impl_module_path = (
+      f"mf_automated_perception.procedure.defs.{key}.implementation"
+    )
+    impl_class_name = f"{proc_def_cls.__name__}Impl"
 
     try:
-      impl_module = importlib.import_module(impl_path)
+      impl_module = importlib.import_module(impl_module_path)
+    except ModuleNotFoundError as e:
+      if e.name == impl_module_path:
+        raise RuntimeError(
+          f"Implementation module missing for procedure '{key}'. "
+          f"Expected '{impl_module_path}.py'"
+        )
+      raise
     except Exception as e:
       raise RuntimeError(
-        f"Failed to import implementation module '{impl_path}' "
+        f"Failed to import implementation module '{impl_module_path}' "
         f"for procedure '{key}': {e}"
       )
-
-    impl_class_name = f"{proc_def_cls.__name__}Impl"
 
     if not hasattr(impl_module, impl_class_name):
       raise RuntimeError(
         f"Implementation class '{impl_class_name}' not found in "
-        f"module '{impl_path}'"
+        f"module '{impl_module_path}'"
       )
 
     impl_cls = getattr(impl_module, impl_class_name)
@@ -175,8 +180,9 @@ class ProcedureFactory:
         f"but directory name is '{key}'"
       )
 
-    # if hasattr(proc_cls, "_run"):
-    #   raise ValueError(
-    #     f"{proc_cls.__name__} defines _run(). "
-    #     f"Definition classes must not implement runtime logic."
-    #   )
+    # definition은 절대 실행 로직을 가지면 안 됨
+    if "_run" in proc_cls.__dict__:
+      raise ValueError(
+        f"{proc_cls.__name__} defines _run(). "
+        f"Definition classes must not implement runtime logic."
+      )

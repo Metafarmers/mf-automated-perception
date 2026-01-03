@@ -36,8 +36,3 @@ class RunSyncEngine(ProcedureBase):
     ("yolo", "detections"),
   )
   output_grain_key: ClassVar[GrainKey] = ("snapshot",)
-
-  # implementation pointer
-  implementation: ClassVar[str] = (
-    "mf_automated_perception.procedure.defs.run_sync_engine.implementation"
-  )

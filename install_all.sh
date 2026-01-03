@@ -66,10 +66,6 @@ log "activating virtual environment"
 source "${VENV_DIR}/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
 
-# install python package
-log "installing python package (editable)"
-pip install --upgrade pip
-pip install -e .
 
 log "generating setup.bash"
 cat <<EOF > "${SETUP_BASH}"
@@ -84,8 +80,16 @@ source "${HOME}/.bash_completions/mf-eye.sh"
 EOF
 
 
+
+# install python package
+log "installing python package (editable)"
+pip install --upgrade pip
+pip install -e .
+mf-eye --install-completion
+
+
 chmod +x "${SETUP_BASH}"
-echo "source ${SETUP_BASH}" >> ~/.bashrc
+#echo "source ${SETUP_BASH}" >> ~/.bashrc
 
 
 

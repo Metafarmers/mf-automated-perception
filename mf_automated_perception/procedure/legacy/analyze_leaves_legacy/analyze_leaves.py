@@ -317,7 +317,6 @@ def process_leaf_model2(images, yolo_params, config: MfConfig, logger):
 def main():
   logger = get_logger(
     Path(__file__).stem,
-    file_dir='/workspace/data/procedure_logs'
   )
   config = MfConfig.load_config_from_yaml("run_model_with_images.yaml")
   yolo_params = {

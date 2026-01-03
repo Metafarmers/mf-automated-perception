@@ -5,9 +5,10 @@ from mf_automated_perception.env import GRAIN_DATA_ROOT
 
 def test_grain_preview():
   GrainFactory.build_registry()
-  loaded_grain = GrainFactory.load_latest_grain(
+  loaded_grain = GrainFactory.load_grain(
     grain_data_root=GRAIN_DATA_ROOT,
-    key=('raw', 'rosbag', 'decoded'))
+    key=('raw', 'rosbag', 'decoded'),
+    load_rule="latest")
 
   print('[Loaded Grain]')
   loaded_grain.print_grain_summary()

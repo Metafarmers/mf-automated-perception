@@ -37,9 +37,10 @@ def visualize_snapshot_rerun() -> None:
   # --------------------------------------------------
   GrainFactory.build_registry()
 
-  snapshot_grain = GrainFactory.load_latest_grain(
+  snapshot_grain = GrainFactory.load_grain(
     key=("snapshot",),
     grain_data_root=GRAIN_DATA_ROOT,
+    load_rule="latest",
   )
 
   synced: SnapshotTimeline = load_sync_results_from_snapshot_db(

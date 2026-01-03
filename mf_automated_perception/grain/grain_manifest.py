@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -11,7 +11,7 @@ class GrainManifest(BaseModel):
   # provenance (minimal)
   git_commit: str
   schema_files: List[str] = []
-
+  workflow_uuid: Optional[str]
 
   # creation info
   source_procedure: str

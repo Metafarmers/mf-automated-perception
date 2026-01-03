@@ -318,7 +318,7 @@ class YoloUltralyticsWrapper:
 
 
   # draw result on image
-  def draw(self, cv_img, draw_raw=False):
+  def draw_with_latest_results(self, cv_img, draw_raw=False):
     if draw_raw:
       if self.last_raw_result is None:
         return cv_img
@@ -446,7 +446,7 @@ def test_yolo_on_rgb_overlay_depth(
 
 if __name__ == "__main__":
   from mf_automated_perception.utils.gp_logger import get_logger
-  logger = get_logger("yolo_test", file_dir='/tmp')
+  logger = get_logger("yolo_test")
 
   test_yolo_on_rgb_overlay_depth(
     logger=logger,

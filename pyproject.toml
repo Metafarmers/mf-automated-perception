@@ -4,17 +4,19 @@ version = "0.1.0"
 description = "CLI and runner for automated perception procedures"
 requires-python = "==3.10.*"
 
+# this has a lot dependencies for ros2 humble
 dependencies = [
   "typer>=0.12",
   "rich>=13.0",
   "pydantic",
-  "pytest",
+  "pytest==6.2.5",
   "rerun-sdk",
   "pyyaml",
   "tqdm",
   "opencv-python==4.7.0.72",
   "numpy==1.23.5",
-  "seaborn"
+  "seaborn",
+  "lark>=1.1.5,<2.0"
 ]
 
 [project.scripts]
@@ -45,8 +47,10 @@ ignore = [
 # pytest configuration
 # ============================
 [tool.pytest.ini_options]
-addopts = "-ra -q"
+# prevent ros2 pytest
+addopts = "-ra -q "
 testpaths = ["tests"]
+
 
 markers = [
   "unit: fast unit tests without side effects",
